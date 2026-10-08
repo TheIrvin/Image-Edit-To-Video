@@ -90,6 +90,8 @@ Se conserva la opción **1260** solicitada y se añade 1080. En esta app, “2K�
 
 ## Voces locales
 
+El montaje genera primero los audios pendientes y mide cada WAV, sin transcribirlos de nuevo. La caché conserva los bloques completos y las frases de voz clonada terminadas para reutilizarlas tras una cancelación. Las frases cortas de un bloque se agrupan hasta 220 caracteres para reducir llamadas al modelo. La estimación del tiempo restante se calcula a partir de los bloques completados y puede variar según su longitud. En el render se extrae el último fotograma desde el último segundo del clip, evitando decodificarlo entero.
+
 ### Clonación: Chatterbox Multilingual
 
 Desde **Biblioteca de voces**, pulsa **Instalar motor local**. También puedes ejecutar `Instalar-voces.bat`. La descarga inicial requiere Internet y varios GB de almacenamiento. Después se ejecuta localmente, sin enviar la narración ni tus muestras a un servicio TTS.

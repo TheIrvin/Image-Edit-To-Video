@@ -45,9 +45,7 @@ def prepare_image(
         )
         canvas = ImageEnhance.Brightness(canvas).enhance(0.55)
         # Las imágenes horizontales ocupan todo el ancho del encuadre vertical.
-        foreground = ImageOps.contain(
-            image, (w, h), Image.Resampling.LANCZOS
-        )
+        foreground = ImageOps.contain(image, (w, h), Image.Resampling.LANCZOS)
         canvas.paste(
             foreground, ((w - foreground.width) // 2, (h - foreground.height) // 2)
         )
@@ -167,7 +165,14 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
         indexed = indexed[max(0, selected - 1) : selected + 1]
     scenes = [s for _, s in indexed]
     voice = get_voice(settings["voice_id"])
-    audio = synthesize(scenes, voice, settings["speed"], job, ffmpeg)
+    audio = synthesize(
+        scenes,
+        voice,
+        settings["speed"],
+        job,
+        ffmpeg,
+        span=100 if reuse_audio_only else 45,
+    )
     if reuse_audio_only:
         return {
             "project_revision": project["revision"],
@@ -260,10 +265,12 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
                 "-y",
                 "-v",
                 "error",
+                "-sseof",
+                "-1",
                 "-i",
                 str(clip),
                 "-vf",
-                f"select=eq(n\\,{frames - 1})",
+                "reverse",
                 "-frames:v",
                 "1",
                 str(previous),

@@ -202,8 +202,8 @@ def synthesize(
     request_path = directory / "speech-request.json"
     write_json(request_path, request)
     job.update(
-        progress=start + 1,
-        message="Cargando voz y narrando; el texto se conserva completo…",
+        progress=start + span * sum(path.exists() for path in outputs) / len(outputs),
+        message=f"{sum(path.exists() for path in outputs)}/{len(outputs)} audios en caché · cargando voz para los pendientes…",
     )
     last_done = None
 
@@ -212,6 +212,18 @@ def synthesize(
         if path.exists():
             return
         temp = path.with_suffix(".part.wav")
+        with wave.open(str(raw), "rb") as source:
+            ready = (
+                source.getnchannels(),
+                source.getsampwidth(),
+                source.getframerate(),
+                source.getcomptype(),
+            ) == (1, 2, 24000, "NONE")
+        if float(speed) == 1.0 and ready:
+            if wav_duration(raw) <= 0:
+                raise ValueError("El sintetizador produjo un archivo vacío.")
+            raw.replace(path)
+            return
         # No silenceremove: nunca se corta la narración ni sus pausas originales.
         job.run(
             [
@@ -255,7 +267,11 @@ def synthesize(
         identity = (done, message)
         if identity != last_done:
             last_done = identity
-            job.update(progress=start + span * done / len(missing), message=message)
+            job.update(
+                progress=start
+                + span * sum(path.exists() for path in outputs) / len(outputs),
+                message=message,
+            )
 
     job.run(command + [str(request_path)], progress=progress)
     for item in missing:

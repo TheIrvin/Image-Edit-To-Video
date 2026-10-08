@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,9 +26,6 @@ def chunks(text: str, limit: int = 220):
                 yield buffer
                 buffer = ""
             buffer = (buffer + " " + word).strip()
-        if buffer and re.search(r"[.!?;]$", buffer):
-            yield buffer
-            buffer = ""
     if buffer:
         yield buffer
 
@@ -80,6 +79,10 @@ def main():
     status(0, "Analizando la muestra de voz…")
     model.prepare_conditionals(request["reference"], exaggeration=0.5)
     total = len(request["items"])
+    phrase_cache = ROOT / "data" / "cache" / "speech-phrases"
+    phrase_cache.mkdir(parents=True, exist_ok=True)
+    reference_hash = hashlib.sha256(Path(request["reference"]).read_bytes()).hexdigest()
+    started = time.monotonic()
     for i, item in enumerate(request["items"]):
         pieces = []
         torch.manual_seed(17 + i)
@@ -89,13 +92,41 @@ def main():
                 i,
                 f"Voz clonada: escena {i + 1}/{total}, frase {phrase_index + 1}/{len(phrases)}…",
             )
-            audio = model.generate(
-                text,
-                language_id=request.get("language", "es"),
-                cfg_weight=0.3,
-                exaggeration=0.5,
+            seed = int(hashlib.sha256(text.encode()).hexdigest()[:8], 16)
+            signature = json.dumps(
+                [
+                    reference_hash,
+                    request.get("language", "es"),
+                    text,
+                    seed,
+                    0.3,
+                    0.5,
+                    "v2",
+                ],
+                ensure_ascii=False,
             )
-            pieces.append(audio.squeeze().numpy())
+            cached = phrase_cache / (
+                hashlib.sha256(signature.encode()).hexdigest() + ".wav"
+            )
+            if cached.exists():
+                waveform, sample_rate = sf.read(cached, dtype="float32")
+                if sample_rate != model.sr:
+                    raise ValueError("Frecuencia inválida en la caché de frases.")
+            else:
+                torch.manual_seed(seed)
+                audio = model.generate(
+                    text,
+                    language_id=request.get("language", "es"),
+                    cfg_weight=0.3,
+                    exaggeration=0.5,
+                )
+                waveform = audio.squeeze().numpy()
+                if not np.isfinite(waveform).all():
+                    raise ValueError("El modelo produjo audio inválido.")
+                temp = cached.with_suffix(".part.wav")
+                sf.write(temp, waveform, model.sr, subtype="PCM_16")
+                temp.replace(cached)
+            pieces.append(waveform)
             pieces.append(np.zeros(int(model.sr * 0.06), dtype=np.float32))
         if not pieces:
             raise ValueError("La escena no tiene texto.")
@@ -105,7 +136,12 @@ def main():
                 "El modelo produjo audio inválido; vuelve a generar esta escena."
             )
         sf.write(item["output"], waveform, model.sr, subtype="PCM_16")
-        status(i + 1, f"Voz clonada: escena {i + 1}/{total} terminada")
+        elapsed = time.monotonic() - started
+        remaining = elapsed / (i + 1) * (total - i - 1)
+        status(
+            i + 1,
+            f"Voz clonada: escena {i + 1}/{total} terminada · quedan ~{remaining / 60:.0f} min (estimación)",
+        )
 
 
 if __name__ == "__main__":
