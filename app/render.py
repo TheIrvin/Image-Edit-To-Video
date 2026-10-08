@@ -72,7 +72,7 @@ def prepare_image(
     canvas.save(destination)
 
 
-def motion_filter(motion, frames, width, height, fps):
+def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=0):
     # Aceleración y frenado continuos, también en el fotograma de reserva.
     # Las escenas breves recorren menos distancia para mantener una cámara lenta.
     t = f"min(1,on/{max(1, frames - 1)})"
@@ -102,6 +102,27 @@ def motion_filter(motion, frames, width, height, fps):
         x, y = f"(iw-iw/zoom)*{backward}", f"(ih-ih/zoom)*{backward}"
     elif motion == "still":
         z = "1"
+    elif motion in {"push_focus", "reveal", "drift"}:
+        # Rampas breves en los extremos y avance sostenido en el centro, sin
+        # detener la cámara durante una gran parte de cada plano.
+        ramp = 0.14
+        travel = f"if(lt({t},{ramp}),{t}*{t}/{2*ramp},if(gt({t},{1-ramp}),{1-ramp}-(1-{t})*(1-{t})/{2*ramp},{t}-{ramp/2}))/{1-ramp}"
+        q = f"({travel})"
+        amount = min(0.12, 0.009 * max(0, (frames - 1) / fps))
+        if motion == "drift":
+            amount *= 0.45
+        start, end = (1.025, 1.025 + amount)
+        if motion == "reveal":
+            start, end = end, start
+        z = f"{start:.6f}+({end-start:.6f})*{q}"
+        fx, fy = focus
+        # Centrar el destino sobre el punto elegido, con límites seguros.
+        target_x = f"max(0,min(iw-iw/zoom,iw*{fx:.6f}-iw/zoom/2))"
+        target_y = f"max(0,min(ih-ih/zoom,ih*{fy:.6f}-ih/zoom/2))"
+        x, y = target_x, target_y
+        if motion == "drift":
+            direction = 1 if variant % 2 else -1
+            x = f"max(0,min(iw-iw/zoom,({target_x})+(iw-iw/zoom)*{direction}*0.18*(2*{q}-1)))"
     # Un fotograma de reserva permite a fps confirmar el último intervalo; el
     # encoder limita la salida al número exacto de frames de la escena.
     return f"zoompan=z='{z}':x='{x}':y='{y}':d={frames + 1}:s={width}x{height}:fps={fps},format=yuv420p,setpts=PTS-STARTPTS,fps={fps}"
@@ -207,7 +228,7 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
         frames, duration = segment_duration(
             audio_duration, settings["pause"], scene["extra_pause"], fps
         )
-        motion, transition = scene_plan(scene, index, settings["seed"])
+        motion, transition = scene_plan(scene, index, settings["seed"], duration)
         if previous is None:
             transition = "cut"
         incoming = min(settings["transition_duration"], duration * 0.25)
@@ -229,7 +250,30 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
             "-i",
             str(base),
         ]
-        current_filter = motion_filter(motion, frames, width, height, fps)
+        # Traducir el punto de interés al recorte real, evitando aplicarlo dos veces.
+        focus = (scene["focus_x"], scene["focus_y"])
+        fit = settings["fit"] if scene["fit"] == "inherit" else scene["fit"]
+        if fit != "blur":
+            with Image.open(image_path) as source:
+                source_size = ImageOps.exif_transpose(source).size
+            left, top, right, bottom = crop_box(
+                *source_size, width / height, *focus
+            )
+            focus = (
+                (source_size[0] * focus[0] - left) / (right - left),
+                (source_size[1] * focus[1] - top) / (bottom - top),
+            )
+        else:
+            with Image.open(image_path) as source:
+                sw, sh = ImageOps.exif_transpose(source).size
+            scale = min(width / sw, height / sh)
+            focus = (
+                0.5 + (focus[0] - 0.5) * sw * scale / width,
+                0.5 + (focus[1] - 0.5) * sh * scale / height,
+            )
+        current_filter = motion_filter(
+            motion, frames, width, height, fps, focus, scene["number"]
+        )
         if transition != "cut":
             command += [
                 "-loop",

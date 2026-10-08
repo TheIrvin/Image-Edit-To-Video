@@ -25,6 +25,9 @@ MOTIONS = {
     "diagonal_in",
     "diagonal_out",
     "still",
+    "push_focus",
+    "reveal",
+    "drift",
 }
 TRANSITIONS = {
     "auto",
@@ -319,40 +322,37 @@ def dimensions(settings):
     return (w, h) if settings["aspect"] == "16:9" else (h, w)
 
 
-def scene_plan(scene, index: int, seed: int):
-    # Secuencia determinista: resultados repetibles y sin paneos aleatorios en bucle.
-    moves = [
-        "zoom_in",
-        "pan_right",
-        "zoom_out",
-        "pan_down",
-        "pan_left",
-        "diagonal_in",
-        "pan_up",
-        "diagonal_out",
-    ]
-    transitions = [
-        "cut",
-        "cut",
-        "fade",
-        "cut",
-        "wipeleft",
-        "cut",
-        "fadeblack",
-        "cut",
-        "fade",
-        "cut",
-        "slideright",
-        "cut",
-    ]
+def scene_plan(scene, index: int, seed: int, duration=None):
+    # Reglas editoriales transparentes; no pretenden comprender la imagen.
+    text = scene.get("text", "").casefold()
+    time_change = bool(re.search(
+        r"\b(después|más tarde|al día siguiente|durante los días|años después|pasaron)\b", text
+    ))
+    emphasis = bool(re.search(
+        r"\b(murió|muerte|miedo|recordaba|pensó|comprendió|descubrió|secreto|miró|mano|rostro)\b", text
+    ))
+    reveal = bool(re.search(
+        r"\b(ciudad|paisaje|mundo|calle|puente|habitación|alrededor)\b", text
+    ))
+    variation = int(hashlib.sha256(
+        f"{seed}:{scene.get('number', index)}:{text}".encode()
+    ).hexdigest()[:8], 16)
+    if duration is not None and duration < 3.5:
+        automatic = "still"
+    elif emphasis:
+        automatic = "push_focus"
+    elif reveal or time_change:
+        automatic = "reveal"
+    else:
+        automatic = ("drift", "push_focus", "reveal", "still")[variation % 4]
     motion = (
         scene["motion"]
         if scene["motion"] != "auto"
-        else moves[(index + seed) % len(moves)]
+        else automatic
     )
     transition = (
         scene["transition"]
         if scene["transition"] != "auto"
-        else transitions[(index + seed) % len(transitions)]
+        else ("fade" if time_change else "cut")
     )
     return motion, "cut" if index == 0 else transition

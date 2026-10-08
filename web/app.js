@@ -20,7 +20,10 @@ const state = {
   videoMode: false,
 };
 const motions = {
-  auto: "Automático · variar",
+  auto: "Automático · narrativo",
+  push_focus: "Acercamiento al punto de interés",
+  reveal: "Revelar el entorno",
+  drift: "Desplazamiento con acercamiento sutil",
   zoom_in: "Acercamiento lento",
   zoom_out: "Alejamiento lento",
   pan_right: "Izquierda → derecha",
