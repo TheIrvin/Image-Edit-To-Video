@@ -175,11 +175,9 @@ def main():
         Path(request["progress"]).with_name("openvoice-metrics.json").write_text(
             json.dumps({"parameters": parameters, "scenes": metrics}), encoding="utf-8"
         )
-        remaining = (
-            (time.monotonic() - started)
-            / (index + 1)
-            * (len(request["items"]) - index - 1)
-        )
+        completed_chars = sum(len(entry["text"]) for entry in request["items"][:index + 1])
+        remaining_chars = sum(len(entry["text"]) for entry in request["items"][index + 1:])
+        remaining = (time.monotonic() - started) / max(1, completed_chars) * remaining_chars
         status(
             index + 1,
             f"OpenVoice: {index + 1}/{len(request['items'])} terminadas · quedan ~{remaining / 60:.0f} min",

@@ -485,6 +485,8 @@ async function pollJobs() {
   polling = true;
   try {
     state.jobs = await api("/api/jobs");
+    for (const job of state.jobs)
+      if (["running", "queued"].includes(job.status)) state.tracked.add(job.id);
     for (const job of state.jobs) {
       if (
         state.tracked.has(job.id) &&
