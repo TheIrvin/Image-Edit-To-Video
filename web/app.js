@@ -511,11 +511,13 @@ async function pollJobs() {
   }
 }
 async function completeJob(job) {
-  if (["install", "cpu-optimize", "openvoice-install"].includes(job.kind)) {
+  if (["install", "cpu-optimize", "openvoice-install", "openvoice-optimize"].includes(job.kind)) {
     await refreshStatus();
     toast(
       job.kind === "cpu-optimize"
         ? "Perfil de CPU guardado para las próximas narraciones."
+        : job.kind === "openvoice-optimize"
+          ? "Comparación terminada. OpenVoice usará el motor más rápido medido."
         : "Motor local de voz instalado.",
     );
     return;
@@ -617,6 +619,10 @@ async function refreshStatus() {
     : "Instalar motor local";
   $("#install-engine").disabled = state.status.engine.ready;
   const openvoiceReady = state.status.engine.openvoice?.ready;
+  const acceleration = state.status.engine.openvoice?.acceleration;
+  $("#optimize-openvoice").disabled = !openvoiceReady || !!acceleration?.enabled;
+  $("#optimize-openvoice").textContent = acceleration?.enabled
+    ? `OpenVINO activo · ${acceleration.device}` : "Acelerar con OpenVINO";
   $("#install-openvoice").disabled = openvoiceReady;
   $("#install-openvoice").textContent = openvoiceReady
     ? "OpenVoice instalado"
@@ -1184,6 +1190,9 @@ function setupEvents() {
   });
   $("#install-openvoice").onclick = report(async () =>
     trackJob(await api("/api/engine/openvoice/install", "POST", {})),
+  );
+  $("#optimize-openvoice").onclick = report(async () =>
+    trackJob(await api("/api/engine/openvoice/optimize", "POST", {})),
   );
   $("#cancel-job").onclick = report(() =>
     api(`/api/jobs/${state.dock}/cancel`, "POST", {}),

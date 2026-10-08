@@ -467,6 +467,11 @@ def install_openvoice_engine():
     )
 
 
+@app.post("/api/engine/openvoice/optimize")
+def optimize_openvoice_engine():
+    return jobs.submit("openvoice-optimize", "Acelerar OpenVoice con OpenVINO", speech.optimize_openvoice)
+
+
 @app.get("/api/exports")
 def export_list():
     core.ensure_data()

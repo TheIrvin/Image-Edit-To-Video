@@ -35,8 +35,9 @@ def prepare_files():
 
 
 def main():
-    preparing = sys.argv[1] == "--prepare"
-    if not preparing and (ROOT / "data/models/openvoice-v2/ready.json").exists():
+    preparing = sys.argv[1] in {"--prepare", "--prepare-openvino"}
+    preparing_openvino = sys.argv[1] == "--prepare-openvino"
+    if (not preparing or preparing_openvino) and (ROOT / "data/models/openvoice-v2/ready.json").exists():
         os.environ["HF_HUB_OFFLINE"] = "1"
     request = (
         None if preparing else json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
@@ -100,7 +101,22 @@ def main():
         json.dumps({"ready": True, "parameters": parameters}), encoding="utf-8"
     )
     if preparing:
+        if preparing_openvino:
+            from openvoice_openvino import prepare
+            prepare(model, converter, folder / "openvino")
         return
+
+    ov_profile = folder / "openvino/profile.json"
+    if ov_profile.exists() and not request.get("benchmark_openvino"):
+        from openvoice_openvino import activate
+        profile = json.loads(ov_profile.read_text(encoding="utf-8"))
+        if profile.get("enabled"):
+            status(0, "Cargando OpenVoice acelerado con OpenVINO…")
+            try:
+                activate(model, converter, folder / "openvino", profile.get("device", "CPU"))
+                print(f"OpenVINO activo: {profile.get('device', 'CPU')}", flush=True)
+            except Exception as error:
+                print(f"OpenVINO no disponible, usando PyTorch: {error}", flush=True)
 
     embeddings = ROOT / "data/cache/openvoice-speakers"
     embeddings.mkdir(parents=True, exist_ok=True)
@@ -114,6 +130,10 @@ def main():
     )
     if not embedding.exists():
         torch.save(target_se.cpu(), embedding)
+    if request.get("benchmark_openvino"):
+        from openvoice_openvino import benchmark
+        benchmark(model, converter, source_se, target_se, request, folder / "openvino")
+        return
     metrics = []
     started = time.monotonic()
     for index, item in enumerate(request["items"]):

@@ -22,10 +22,12 @@ def voice_python():
 
 
 def openvoice_status():
+    acceleration = read_json(ROOT / "data/models/openvoice-v2/openvino/profile.json", {})
     return {
         "ready": voice_python().exists()
         and (ROOT / "data/models/openvoice-v2/ready.json").exists(),
         "model": "OpenVoice V2 + MeloTTS ES",
+        "acceleration": acceleration,
     }
 
 
@@ -513,4 +515,31 @@ def install_openvoice(job):
             "--prepare",
         ]
     )
+    return openvoice_status()
+
+
+def optimize_openvoice(job):
+    if not openvoice_status()["ready"]:
+        raise ValueError("Instala OpenVoice primero.")
+    python = voice_python()
+    uv = shutil.which("uv")
+    prefix = [uv, "pip", "install", "--python", str(python)] if uv else [str(python), "-m", "pip", "install"]
+    job.update(progress=5, message="Instalando aceleración OpenVINO…")
+    job.run(prefix + ["openvino>=2025,<2027"])
+    job.update(progress=20, message="Preparando modelos OpenVINO; se hace una sola vez…")
+    job.run([str(python), "-X", "utf8", str(ROOT / "scripts/openvoice_worker.py"), "--prepare-openvino"])
+    voices = [v for v in list_voices() if v["engine"] == "openvoice"]
+    if not voices:
+        raise ValueError("Guarda una voz OpenVoice para medir la aceleración.")
+    directory = DATA / "jobs" / job.id
+    directory.mkdir(parents=True, exist_ok=True)
+    request = directory / "openvino-benchmark-request.json"
+    write_json(request, {
+        "reference": voices[0]["reference"], "benchmark_openvino": True,
+        "progress": str(directory / "speech-progress.json"),
+        "items": [{"text": "Nico abrió los ojos. Nadie había escuchado la puerta."},
+                  {"text": "Durante los días siguientes, Nico regresó al puente para comprender lo sucedido. Recordaba la mano del desconocido, el agua ocupando el pasillo y la salida que habían conseguido abrir. Ahora miraba la ciudad en silencio, preguntándose quién volvería a casa aquella noche."}],
+    })
+    job.update(progress=60, message="Comparando PyTorch y OpenVINO CPU con narraciones reales…")
+    job.run([str(python), "-X", "utf8", str(ROOT / "scripts/openvoice_worker.py"), str(request)])
     return openvoice_status()
