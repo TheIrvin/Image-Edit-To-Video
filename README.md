@@ -63,6 +63,7 @@ El modo opcional **Por número del archivo** usa el número final: `stick8.png`,
 - Entradas: corte directo, fundido cruzado, fundido por negro, cortinillas, deslizamientos y apertura circular.
 - Filtros: original, cálido, frío, blanco y negro, sepia y cine suave.
 - Cada escena permite editar narración, movimiento, transición, filtro, encuadre, punto de interés y pausa adicional.
+- En «Tu video» puedes seleccionar una carpeta raíz de exportación. Cada MP4 final se copia a una subcarpeta con el nombre del proyecto; las versiones siguientes usan `video-2.mp4`, `video-3.mp4`, etc. «Abrir carpeta» en el historial abre ese destino. Las vistas previas permanecen en el almacenamiento interno.
 - El modo automático usa una secuencia repetible con predominio de cortes y fundidos. No analiza semánticamente la imagen ni decide dónde está un rostro; revisa el punto de interés en el editor.
 - El texto completo se sintetiza por escena y se mide el **WAV real**. La duración visual es `audio + margen global + pausa adicional`, redondeada hacia arriba a un fotograma.
 - El margen predeterminado es **0,1 s**: un audio de 3 s produce una escena de 3,1 s a 30 fps. El redondeo agrega como máximo menos de un fotograma.

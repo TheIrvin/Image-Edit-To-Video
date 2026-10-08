@@ -109,7 +109,7 @@ class PickRequest(BaseModel):
 
 @app.post("/api/pick")
 def pick(body: PickRequest):
-    if body.kind not in {"folder", "script", "voice"}:
+    if body.kind not in {"folder", "export_folder", "script", "voice"}:
         raise ValueError("Tipo de selección inválido.")
     command = [sys.executable, str(core.ROOT / "scripts/picker.py"), body.kind]
     result = subprocess.run(
@@ -511,6 +511,9 @@ def open_export_folder(export_id: str):
     directory = core.DATA / "exports" / core.identifier(export_id)
     if not (directory / "manifest.json").is_file():
         raise FileNotFoundError("Exportación inexistente.")
+    saved = core.read_json(directory / "manifest.json", {}).get("output_path")
+    if saved and Path(saved).is_file():
+        directory = Path(saved).parent
     if os.name == "nt":
         os.startfile(directory)
     return {"path": str(directory)}

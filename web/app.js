@@ -190,6 +190,7 @@ function renderEditor() {
   $("#editor").hidden = !p;
   if (!p) return;
   $("#project-name").value = p.name;
+  $("#export-root").value = p.settings.export_root || "";
   $("#scene-count").textContent = p.scenes.length;
   $("#save-state").textContent = "Guardado";
   $("#project-summary").textContent =
@@ -575,6 +576,7 @@ async function completeJob(job) {
         : "Video exportado";
       $("#canvas-caption").textContent =
         `${result.width} × ${result.height} · ${seconds(result.duration)} · ${result.voice_name}`;
+      if (result.output_path) $("#canvas-caption").textContent += ` · Guardado en: ${result.output_path}`;
       if (state.page === "studio")
         $("#video-player").scrollIntoView({
           behavior: "smooth",
@@ -1107,6 +1109,18 @@ function setupEvents() {
     state.project.settings.subtitles = $("#subtitles").checked;
     markDirty();
   };
+  $("#export-root").onchange = () => {
+    state.project.settings.export_root = $("#export-root").value.trim();
+    markDirty();
+  };
+  $("#pick-export-root").onclick = report(async () => {
+    const selected = await api("/api/pick", "POST", { kind: "export_folder" });
+    if (selected.path) {
+      $("#export-root").value = selected.path;
+      state.project.settings.export_root = selected.path;
+      markDirty();
+    }
+  });
   $("#voice-select").onchange = () => {
     state.project.settings.voice_id = $("#voice-select").value;
     markDirty({ audio: true });

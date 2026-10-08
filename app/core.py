@@ -138,6 +138,7 @@ def settings_default():
         "speed": 1.0,
         "seed": 17,
         "subtitles": False,
+        "export_root": "",
     }
 
 
@@ -252,11 +253,16 @@ def get_project(project_id: str) -> dict:
     project = read_json(DATA / "projects" / identifier(project_id) / "project.json")
     if project is None:
         raise FileNotFoundError("El proyecto no existe.")
+    project["settings"].setdefault("export_root", "")
     return project
 
 
 def validate_project(project: dict):
     settings = project["settings"]
+    root = settings.get("export_root", "")
+    if not isinstance(root, str) or (root and not Path(root).is_dir()):
+        raise ValueError("Selecciona una carpeta raíz de exportación existente.")
+    settings["export_root"] = str(Path(root).resolve()) if root else ""
     if (
         settings["aspect"] not in {"16:9", "9:16"}
         or settings["resolution"] not in RESOLUTIONS

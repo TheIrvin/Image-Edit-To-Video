@@ -17,6 +17,36 @@ def ffmpeg_path():
     return shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe()
 
 
+def save_project_mp4(output, root, project_name):
+    import re
+
+    root = Path(root).resolve()
+    if not root.is_dir():
+        raise ValueError("La carpeta raíz de exportación ya no existe.")
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", project_name).strip().rstrip(". ")[:120].rstrip(". ") or "Proyecto"
+    if re.fullmatch(r"(?i)(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(?:\..*)?", name):
+        name = "Proyecto_" + name
+    directory = (root / name).resolve()
+    if not directory.is_relative_to(root):
+        raise ValueError("La subcarpeta debe estar dentro de la carpeta seleccionada.")
+    directory.mkdir(parents=True, exist_ok=True)
+    number = 1
+    while True:
+        target = directory / ("video.mp4" if number == 1 else f"video-{number}.mp4")
+        try:
+            destination = target.open("xb")
+            break
+        except FileExistsError:
+            number += 1
+    try:
+        with destination, output.open("rb") as source:
+            shutil.copyfileobj(source, destination, length=1024 * 1024)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    return str(target)
+
+
 def crop_box(width, height, ratio, x, y):
     if width / height > ratio:
         cw, ch = height * ratio, height
@@ -429,6 +459,10 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
         "subtitles_url": f"/api/exports/{job.id}/subtitles",
         "subtitles_enabled": settings["subtitles"],
     }
+    if not manifest["preview"] and settings.get("export_root"):
+        job.check()
+        job.update(progress=98, message="Guardando MP4 en la carpeta del proyecto…")
+        manifest["output_path"] = save_project_mp4(output, settings["export_root"], project["name"])
     write_json(directory / "manifest.json", manifest)
     # Todos los archivos borrados pertenecen al render actual. MP4 y fuentes quedan guardados.
     shutil.rmtree(work)

@@ -9,9 +9,9 @@ root = tk.Tk()
 root.withdraw()
 root.attributes("-topmost", True)
 kind = sys.argv[1]
-if kind == "folder":
+if kind in {"folder", "export_folder"}:
     value = filedialog.askdirectory(
-        title="Seleccionar carpeta de imágenes", parent=root
+        title="Seleccionar carpeta de destino" if kind == "export_folder" else "Seleccionar carpeta de imágenes", parent=root
     )
 elif kind == "script":
     value = filedialog.askopenfilename(
