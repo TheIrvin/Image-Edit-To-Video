@@ -161,7 +161,60 @@ def wav_duration(path: Path):
         return wav.getnframes() / wav.getframerate()
 
 
-def synthesize(
+def compact_voice_pauses(source: Path, destination: Path):
+    """Acortar sólo silencios interiores prolongados en PCM, sin regenerar voz."""
+    import numpy as np
+
+    with wave.open(str(source), "rb") as wav:
+        params = wav.getparams()
+        if (params.nchannels, params.sampwidth) != (1, 2):
+            raise ValueError("Formato inesperado al ajustar pausas.")
+        samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+    window = max(1, round(params.framerate * 0.01))
+    count = len(samples) // window
+    if count:
+        blocks = samples[:count * window].astype(np.float32).reshape(count, window)
+        quiet = np.sqrt(np.mean(blocks * blocks, axis=1)) < 32768 * 10 ** (-48 / 20)
+        edges = np.diff(np.r_[False, quiet, False].astype(np.int8))
+        starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
+        pieces, cursor = [], 0
+        for start, end in zip(starts, ends):
+            # No tocar entrada/salida ni pausas normales ni fonemas breves.
+            if start == 0 or end == count or (end - start) * window < params.framerate * 0.65:
+                continue
+            first, last = start * window, end * window
+            keep = round(params.framerate * 0.35)
+            cut_start = first + keep // 2
+            cut_end = last - (keep - keep // 2)
+            pieces.append(samples[cursor:cut_start])
+            cursor = cut_end
+        pieces.append(samples[cursor:])
+        samples = np.concatenate(pieces)
+    temp = destination.with_suffix(".part.wav")
+    with wave.open(str(temp), "wb") as wav:
+        wav.setparams(params)
+        wav.writeframes(samples.tobytes())
+    temp.replace(destination)
+
+
+def synthesize(items, voice, speed, job, ffmpeg, start=0, span=45):
+    import hashlib
+
+    originals = _synthesize(items, voice, speed, job, ffmpeg, start, span)
+    if voice["engine"] not in {"chatterbox", "openvoice"}:
+        return originals
+    outputs = []
+    for original in originals:
+        job.check()
+        key = hashlib.sha256((original.stem + ":paced-v1").encode()).hexdigest()
+        edited = original.with_name(key + ".wav")
+        if not edited.exists():
+            compact_voice_pauses(original, edited)
+        outputs.append(edited)
+    return outputs
+
+
+def _synthesize(
     items: list[dict], voice: dict, speed: float, job, ffmpeg: str, start=0, span=45
 ):
     ensure_data()
@@ -187,7 +240,7 @@ def synthesize(
         return outputs
     if float(speed) != 1.0:
         # La velocidad es edición del WAV; nunca obliga a clonar la voz de nuevo.
-        originals = synthesize(
+        originals = _synthesize(
             missing, voice, 1.0, job, ffmpeg, start=start, span=span * 0.9
         )
         for index, (item, original) in enumerate(zip(missing, originals)):
