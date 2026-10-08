@@ -70,6 +70,8 @@ function options(select, choices) {
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {
     method,
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -448,6 +450,7 @@ async function pick(kind, target, button) {
   }
 }
 function trackJob(job) {
+  ensureJobPolling();
   state.tracked.add(job.id);
   state.jobs = [job, ...state.jobs.filter((j) => j.id !== job.id)];
   state.dock = job.id;
@@ -470,6 +473,10 @@ function updateDock() {
     job.status === "queued" ? "Quitar de la cola" : "Cancelar";
 }
 let polling = false;
+let jobPollTimer = null;
+function ensureJobPolling() {
+  if (jobPollTimer === null) jobPollTimer = setInterval(pollJobs, 1800);
+}
 async function pollJobs() {
   if (polling) return;
   polling = true;
@@ -496,6 +503,7 @@ async function pollJobs() {
     if (state.jobs.some((j) => ["running", "queued"].includes(j.status)))
       toast("Se perdió la conexión con la app. Revisa que siga abierta.", true);
   } finally {
+    updateDock();
     polling = false;
   }
 }
@@ -537,7 +545,6 @@ async function completeJob(job) {
     return;
   }
   if (job.kind === "render") {
-    await refreshHistory();
     if (state.project?.id === job.project_id) {
       state.videoMode = true;
       const result = job.result;
@@ -572,6 +579,7 @@ async function completeJob(job) {
         ? "Vista previa lista."
         : "Video exportado y guardado en el historial.",
     );
+    await refreshHistory();
   }
 }
 async function startRender({
@@ -1190,6 +1198,8 @@ function setupEvents() {
 }
 async function init() {
   setupEvents();
+  // El progreso debe funcionar aunque falle la carga de otro panel.
+  ensureJobPolling();
   await Promise.all([
     refreshProjects(),
     refreshStatus(),
@@ -1201,6 +1211,5 @@ async function init() {
     .filter((j) => ["running", "queued"].includes(j.status))
     .forEach((j) => state.tracked.add(j.id));
   updateDock();
-  setInterval(pollJobs, 1800);
 }
 init().catch((error) => toast(`No se pudo conectar: ${error.message}`, true));
