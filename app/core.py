@@ -303,7 +303,12 @@ def audio_key(text: str, voice: dict, speed: float) -> str:
         key: voice.get(key)
         for key in ("id", "engine", "language", "reference", "system_name", "created")
     }
-    fingerprint = {"text": text, "voice": stable_voice, "speed": speed, "version": 1}
+    fingerprint = {
+        "text": text,
+        "voice": stable_voice,
+        "speed": float(speed),
+        "version": 1,
+    }
     return hashlib.sha256(
         json.dumps(fingerprint, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()

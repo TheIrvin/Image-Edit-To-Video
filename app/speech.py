@@ -156,11 +156,13 @@ def synthesize(
     cache = DATA / "cache/audio"
     cache.mkdir(parents=True, exist_ok=True)
     outputs, missing = [], []
+    pending_keys = set()
     for item in items:
         key = audio_key(item["text"], voice, speed)
         path = cache / f"{key}.wav"
         outputs.append(path)
-        if not path.exists():
+        if not path.exists() and key not in pending_keys:
+            pending_keys.add(key)
             missing.append(
                 {
                     "text": item["text"],
@@ -205,23 +207,10 @@ def synthesize(
     )
     last_done = None
 
-    def progress():
-        nonlocal last_done
-        try:
-            value = json.loads(progress_path.read_text(encoding="utf-8"))
-            identity = (value["done"], value["message"])
-            if identity != last_done:
-                last_done = identity
-                job.update(
-                    progress=start + span * value["done"] / len(missing),
-                    message=value["message"],
-                )
-        except (OSError, ValueError, KeyError):
-            pass
-
-    job.run(command + [str(request_path)], progress=progress)
-    for item in missing:
+    def normalize(item):
         raw, path = Path(item["output"]), Path(item["final"])
+        if path.exists():
+            return
         temp = path.with_suffix(".part.wav")
         # No silenceremove: nunca se corta la narración ni sus pausas originales.
         job.run(
@@ -247,6 +236,30 @@ def synthesize(
             raise ValueError("El sintetizador produjo un archivo vacío.")
         temp.replace(path)
         raw.unlink(missing_ok=True)
+
+    completed = 0
+
+    def progress():
+        nonlocal last_done, completed
+        try:
+            value = json.loads(progress_path.read_text(encoding="utf-8"))
+            done = max(0, min(int(value["done"]), len(missing)))
+            message = value["message"]
+        except (OSError, ValueError, KeyError):
+            return
+        # Guardar cada audio terminado mientras el modelo narra el siguiente.
+        # Si se cancela, estas escenas completas sí se reutilizan al reintentar.
+        for index in range(completed, done):
+            normalize(missing[index])
+        completed = max(completed, done)
+        identity = (done, message)
+        if identity != last_done:
+            last_done = identity
+            job.update(progress=start + span * done / len(missing), message=message)
+
+    job.run(command + [str(request_path)], progress=progress)
+    for item in missing:
+        normalize(item)
     return outputs
 
 

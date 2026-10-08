@@ -107,3 +107,8 @@ def test_audio_cache_survives_preview_metadata_changes():
     voice.update(preview="preview.wav", preview_text="Otra frase")
     assert audio_key("Hola", voice, 1) == before
     assert audio_key("Adiós", voice, 1) != before
+
+
+def test_audio_cache_uses_same_key_for_integer_or_float_speed():
+    voice = {"id": "demo", "engine": "chatterbox", "language": "es"}
+    assert audio_key("Hola", voice, 1) == audio_key("Hola", voice, 1.0)
