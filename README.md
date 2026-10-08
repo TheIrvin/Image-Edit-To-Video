@@ -90,6 +90,18 @@ Se conserva la opción **1260** solicitada y se añade 1080. En esta app, “2K�
 
 ## Voces locales
 
+### Motor alternativo: OpenVoice V2 + MeloTTS español
+
+La Biblioteca de voces permite instalar OpenVoice V2 y seleccionar el motor al guardar una voz. **Probar en OpenVoice**, en una voz existente de Chatterbox, crea un perfil alternativo con la misma muestra y un ejemplo audible. Usa ese perfil desde **Usar en este proyecto** después de escucharlo.
+
+Este motor usa MeloTTS español para la narración y OpenVoice V2 para convertir el timbre a la muestra. No necesita transcribir el audio ni cargar modelos para otros idiomas. En la prueba local, ambos modelos sumaron **84.666.323 parámetros**. La segunda frase consecutiva produjo 2,98 s de audio en **8,78 s** de síntesis y conversión; la primera llamada y la carga inicial son más lentas. Son mediciones de una frase corta, no un tiempo garantizado para videos completos. El parecido de voz y la expresividad pueden diferir de Chatterbox.
+
+Los proyectos y voces anteriores conservan su motor. Al cambiar de motor, se generan audios nuevos para mantener toda la narración con el mismo tipo de voz. El motor reutiliza sus modelos durante todas las escenas de una tarea y guarda la identidad de la muestra en caché. La instalación necesita Git, Internet y los modelos oficiales de [OpenVoice V2](https://github.com/myshell-ai/OpenVoice) y [MeloTTS](https://github.com/myshell-ai/MeloTTS).
+
+La comparación local de una misma escena de narración produjo un MP4 de 12,7 s con OpenVoice en **85 s** (incluida la carga inicial), frente a unos **255 s** en la prueba anterior con Chatterbox. Es una comparación de esa escena, no una proyección para las 77 escenas del proyecto ni una garantía de calidad equivalente.
+
+**Optimizar CPU**, en la tarjeta de Chatterbox de Biblioteca de voces, compara 1, 2, 4 y 6 hilos con el transformer original y con sus capas lineales en INT8. Guarda un perfil local y aplica el más rápido a los próximos procesos de Chatterbox. Es una medición del decoder, no una promesa de aceleración idéntica para la generación completa. El modelo acústico conserva su precisión original. Cambiar la velocidad de narración reutiliza el audio a velocidad original y aplica `atempo`, sin repetir la clonación. Cada tarea de voz guarda tiempos de tokens y de generación de onda en `speech-metrics.json` para localizar el coste real.
+
 El montaje genera primero los audios pendientes y mide cada WAV, sin transcribirlos de nuevo. La caché conserva los bloques completos y las frases de voz clonada terminadas para reutilizarlas tras una cancelación. Las frases cortas de un bloque se agrupan hasta 220 caracteres para reducir llamadas al modelo. La estimación del tiempo restante se calcula a partir de los bloques completados y puede variar según su longitud. En el render se extrae el último fotograma desde el último segundo del clip, evitando decodificarlo entero.
 
 ### Clonación: Chatterbox Multilingual

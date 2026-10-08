@@ -275,11 +275,18 @@ class RenderRequest(BaseModel):
     preview: bool = False
     scene: int | None = None
     audio_only: bool = False
+    voice_id: str | None = None
 
 
 @app.post("/api/projects/{project_id}/render")
 def generate(project_id: str, body: RenderRequest):
     p = core.get_project(project_id)
+    if body.voice_id:
+        if not body.preview and body.scene is None:
+            raise ValueError(
+                "La voz alternativa solo se puede probar en una vista previa."
+            )
+        p["settings"]["voice_id"] = body.voice_id
     core.validate_project(p)
     speech.get_voice(p["settings"]["voice_id"])
     label = (
@@ -337,6 +344,7 @@ def voices():
 class VoiceImport(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     reference: str
+    engine: str = "chatterbox"
 
 
 @app.post("/api/voices")
@@ -345,13 +353,49 @@ def import_voice(body: VoiceImport):
         "voice",
         f"Guardar voz: {body.name}",
         lambda job: speech.register_voice(
-            body.name, Path(body.reference), render.ffmpeg_path(), job
+            body.name, Path(body.reference), render.ffmpeg_path(), job, body.engine
         ),
     )
 
 
 class VoicePreview(BaseModel):
     text: str = Field(default="", max_length=700)
+
+
+@app.post("/api/voices/{voice_id}/openvoice")
+def try_openvoice(voice_id: str, body: VoicePreview):
+    original = speech.get_voice(voice_id)
+    if original["engine"] != "chatterbox":
+        raise ValueError("Selecciona una voz clonada de Chatterbox.")
+
+    def prepare(job):
+        existing = next(
+            (
+                voice
+                for voice in speech.list_voices()
+                if voice.get("source_voice_id") == voice_id
+                and voice["engine"] == "openvoice"
+            ),
+            None,
+        )
+        if existing:
+            new_id = existing["id"]
+        else:
+            result = speech.register_voice(
+                (original["name"] + " · OpenVoice")[:100],
+                Path(original["reference"]),
+                render.ffmpeg_path(),
+                job,
+                "openvoice",
+            )
+            new_id = result["voice_id"]
+            path = core.DATA / "voices" / new_id / "voice.json"
+            voice = core.read_json(path)
+            voice["source_voice_id"] = voice_id
+            core.write_json(path, voice)
+        return speech.preview_voice(new_id, body.text, job, render.ffmpeg_path())
+
+    return jobs.submit("voice-preview", "Probar clonación con OpenVoice V2", prepare)
 
 
 @app.post("/api/voices/{voice_id}/preview")
@@ -401,6 +445,22 @@ def install_voice_engine():
         if j["kind"] == "install" and j["status"] in {"running", "queued"}:
             return j
     return jobs.submit("install", "Instalar clonador local", speech.install_engine)
+
+
+@app.post("/api/engine/optimize")
+def optimize_voice_cpu():
+    return jobs.submit(
+        "cpu-optimize", "Optimizar voz para esta CPU", speech.optimize_cpu
+    )
+
+
+@app.post("/api/engine/openvoice/install")
+def install_openvoice_engine():
+    return jobs.submit(
+        "openvoice-install",
+        "Instalar OpenVoice V2 para español",
+        speech.install_openvoice,
+    )
 
 
 @app.get("/api/exports")

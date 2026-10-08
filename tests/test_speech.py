@@ -35,6 +35,9 @@ class FixtureWorker:
     def update(self, **values):
         pass
 
+    def check(self):
+        pass
+
     def run(self, command, progress=None):
         if command[0] == "fixture-ffmpeg":
             source = command[command.index("-i") + 1]
@@ -68,6 +71,16 @@ def test_repeated_text_is_generated_once():
     assert outputs[0] == outputs[1]
     assert outputs[0].is_file()
     assert len(job.batches[0]) == 1
+
+
+def test_speed_change_reuses_original_synthesis():
+    job = FixtureWorker()
+    items = [{"text": "Una narración guardada."}]
+    original = speech.synthesize(items, VOICE, 1, job, "fixture-ffmpeg")[0]
+    faster = speech.synthesize(items, VOICE, 1.25, job, "fixture-ffmpeg")[0]
+    assert original.is_file() and faster.is_file()
+    assert original != faster
+    assert len(job.batches) == 1
 
 
 def test_cancel_preserves_completed_audio_for_retry():

@@ -167,6 +167,7 @@ async function openProject(id) {
   const previous = state.exports.find(
     (item) =>
       item.project_id === id &&
+      item.voice_id === state.project.settings.voice_id &&
       item.project_revision === state.project.revision,
   );
   for (const timing of previous?.timing || [])
@@ -499,9 +500,13 @@ async function pollJobs() {
   }
 }
 async function completeJob(job) {
-  if (job.kind === "install") {
+  if (["install", "cpu-optimize", "openvoice-install"].includes(job.kind)) {
     await refreshStatus();
-    toast("Motor local de voz instalado.");
+    toast(
+      job.kind === "cpu-optimize"
+        ? "Perfil de CPU guardado para las próximas narraciones."
+        : "Motor local de voz instalado.",
+    );
     return;
   }
   if (job.kind === "voice") {
@@ -536,7 +541,11 @@ async function completeJob(job) {
     if (state.project?.id === job.project_id) {
       state.videoMode = true;
       const result = job.result;
-      if (!state.dirty && state.project.revision === result.project_revision) {
+      if (
+        !state.dirty &&
+        state.project.revision === result.project_revision &&
+        state.project.settings.voice_id === result.voice_id
+      ) {
         for (const timing of result.timing || [])
           state.times[timing.number] = timing;
         renderSceneList();
@@ -596,6 +605,19 @@ async function refreshStatus() {
     ? "Motor instalado ✓"
     : "Instalar motor local";
   $("#install-engine").disabled = state.status.engine.ready;
+  const openvoiceReady = state.status.engine.openvoice?.ready;
+  $("#install-openvoice").disabled = openvoiceReady;
+  $("#install-openvoice").textContent = openvoiceReady
+    ? "OpenVoice instalado"
+    : "Instalar OpenVoice V2";
+  $("#openvoice-note").textContent = openvoiceReady
+    ? "Clonación local en español. Prueba un ejemplo para comparar la voz."
+    : "Motor alternativo para CPU. Descarga inicial de modelos y dependencias.";
+  $("#optimize-cpu").disabled = !state.status.engine.ready;
+  const profile = state.status.engine.cpu_profile;
+  if (profile?.threads)
+    $("#engine-note").textContent +=
+      ` · CPU calibrada: ${profile.threads} hilos${profile.quantized ? " · INT8" : ""}.`;
 }
 async function refreshVoices() {
   state.voices = await api("/api/voices");
@@ -652,7 +674,7 @@ function renderVoices() {
       name,
     );
     card.append(top);
-    if (voice.engine === "chatterbox") {
+    if (["chatterbox", "openvoice"].includes(voice.engine)) {
       card.append(
         element("span", { class: "sample-label" }, "Muestra original"),
         element("audio", {
@@ -673,6 +695,23 @@ function renderVoices() {
       );
     }
     const actions = element("div", { class: "voice-card-actions" });
+    if (voice.engine === "chatterbox" && state.status.engine.openvoice?.ready)
+      actions.append(
+        element(
+          "button",
+          {
+            class: "button secondary small",
+            onclick: report(async () =>
+              trackJob(
+                await api(`/api/voices/${voice.id}/openvoice`, "POST", {
+                  text: $("#example-text").value,
+                }),
+              ),
+            ),
+          },
+          "Probar en OpenVoice",
+        ),
+      );
     actions.append(
       element(
         "button",
@@ -709,7 +748,7 @@ function renderVoices() {
         ),
       );
     card.append(actions);
-    if (voice.engine === "chatterbox")
+    if (["chatterbox", "openvoice"].includes(voice.engine))
       card.append(
         element(
           "button",
@@ -948,6 +987,7 @@ async function importVoice(event) {
     const job = await api("/api/voices", "POST", {
       name: $("#voice-name").value.trim(),
       reference: $("#voice-reference").value.trim(),
+      engine: $("#voice-engine").value,
     });
     $("#voice-dialog").close();
     trackJob(job);
@@ -1121,6 +1161,12 @@ function setupEvents() {
     const job = await api("/api/engine/install", "POST", {});
     trackJob(job);
   });
+  $("#optimize-cpu").onclick = report(async () => {
+    trackJob(await api("/api/engine/optimize", "POST", {}));
+  });
+  $("#install-openvoice").onclick = report(async () =>
+    trackJob(await api("/api/engine/openvoice/install", "POST", {})),
+  );
   $("#cancel-job").onclick = report(() =>
     api(`/api/jobs/${state.dock}/cancel`, "POST", {}),
   );

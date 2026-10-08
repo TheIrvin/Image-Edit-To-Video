@@ -382,6 +382,18 @@
           <button class="button secondary" id="install-engine">
             Instalar motor local
           </button>
+          <button class="button secondary" id="optimize-cpu">
+            Optimizar CPU
+          </button>
+        </div>
+        <div class="engine-card">
+          <div>
+            <h2>OpenVoice V2 + MeloTTS español</h2>
+            <p id="openvoice-note">Motor alternativo de clonación para CPU.</p>
+          </div>
+          <button class="button secondary" id="install-openvoice">
+            Instalar OpenVoice V2
+          </button>
         </div>
         <div class="voice-example">
           <label for="example-text">Texto para probar tus voces</label
@@ -552,6 +564,14 @@ La noche había caído sobre la ciudad. Nadie imaginaba que aquella decisión ca
           </p>
         </div>
         <p id="voice-error" class="form-error" role="alert"></p>
+        <label
+          >Motor de clonación<select id="voice-engine">
+            <option value="openvoice">OpenVoice V2 · español · rápido</option>
+            <option value="chatterbox">
+              Chatterbox · multilingüe · pesado
+            </option>
+          </select></label
+        >
         <div class="dialog-actions">
           <button type="button" class="button secondary close-dialog">
             Cancelar</button

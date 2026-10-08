@@ -21,6 +21,14 @@ def voice_python():
     )
 
 
+def openvoice_status():
+    return {
+        "ready": voice_python().exists()
+        and (ROOT / "data/models/openvoice-v2/ready.json").exists(),
+        "model": "OpenVoice V2 + MeloTTS ES",
+    }
+
+
 def engine_status():
     marker = ROOT / "data/models/chatterbox-ready.json"
     return {
@@ -28,6 +36,8 @@ def engine_status():
         "ready": voice_python().exists() and marker.exists(),
         "model": "Chatterbox Multilingual V2",
         "device": "CPU",
+        "cpu_profile": read_json(ROOT / "data/models/cpu-profile.json", {}),
+        "openvoice": openvoice_status(),
         "note": "Español y clonación local. En CPU la síntesis puede tardar más que el audio resultante. Primera instalación: varios GB y conexión a Internet.",
     }
 
@@ -92,7 +102,9 @@ def get_voice(voice_id):
     raise ValueError("Selecciona una voz existente.")
 
 
-def register_voice(name: str, reference: Path, ffmpeg: str, job):
+def register_voice(name: str, reference: Path, ffmpeg: str, job, engine="chatterbox"):
+    if engine not in {"chatterbox", "openvoice"}:
+        raise ValueError("Motor de voz inválido.")
     if not name.strip() or len(name) > 100:
         raise ValueError("La voz necesita un nombre de hasta 100 caracteres.")
     if not reference.is_file():
@@ -131,7 +143,7 @@ def register_voice(name: str, reference: Path, ffmpeg: str, job):
     voice = {
         "id": voice_id,
         "name": name.strip(),
-        "engine": "chatterbox",
+        "engine": engine,
         "language": "es",
         "kind": "Voz clonada",
         "created": time.time(),
@@ -173,6 +185,42 @@ def synthesize(
     if not missing:
         job.update(progress=start + span, message="Audio recuperado de la caché")
         return outputs
+    if float(speed) != 1.0:
+        # La velocidad es edición del WAV; nunca obliga a clonar la voz de nuevo.
+        originals = synthesize(
+            missing, voice, 1.0, job, ffmpeg, start=start, span=span * 0.9
+        )
+        for index, (item, original) in enumerate(zip(missing, originals)):
+            job.check()
+            final = Path(item["final"])
+            temp = final.with_suffix(".part.wav")
+            job.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-v",
+                    "error",
+                    "-i",
+                    str(original),
+                    "-af",
+                    f"atempo={speed}",
+                    "-ar",
+                    "24000",
+                    "-ac",
+                    "1",
+                    "-c:a",
+                    "pcm_s16le",
+                    str(temp),
+                ]
+            )
+            if wav_duration(temp) <= 0:
+                raise ValueError("La edición de velocidad produjo audio vacío.")
+            temp.replace(final)
+            job.update(
+                progress=start + span * (0.9 + 0.1 * (index + 1) / len(missing)),
+                message="Ajustando velocidad del audio guardado…",
+            )
+        return outputs
     directory = DATA / "jobs" / job.id
     directory.mkdir(parents=True, exist_ok=True)
     progress_path = directory / "speech-progress.json"
@@ -181,13 +229,24 @@ def synthesize(
         "progress": str(progress_path),
         "language": voice["language"],
     }
-    if voice["engine"] == "chatterbox":
-        if not engine_status()["ready"]:
-            raise ValueError(
-                "Instala el motor Chatterbox desde Voces antes de usar una voz clonada."
-            )
-        request["reference"] = voice["reference"]
-        command = [str(voice_python()), str(ROOT / "scripts/voice_worker.py")]
+    if voice["engine"] in {"chatterbox", "openvoice"}:
+        if voice["engine"] == "openvoice":
+            if not openvoice_status()["ready"]:
+                raise ValueError("Instala OpenVoice V2 desde Biblioteca de voces.")
+            request["reference"] = voice["reference"]
+            command = [
+                str(voice_python()),
+                "-X",
+                "utf8",
+                str(ROOT / "scripts/openvoice_worker.py"),
+            ]
+        else:
+            if not engine_status()["ready"]:
+                raise ValueError(
+                    "Instala Chatterbox desde Voces antes de usar esta voz."
+                )
+            request["reference"] = voice["reference"]
+            command = [str(voice_python()), str(ROOT / "scripts/voice_worker.py")]
     else:
         request["voice"] = voice["system_name"]
         command = [
@@ -288,7 +347,7 @@ def preview_voice(voice_id, text, job, ffmpeg):
     if len(text) > 700:
         raise ValueError("El ejemplo puede tener hasta 700 caracteres.")
     path = synthesize([{"text": text}], voice, 1, job, ffmpeg, span=90)[0]
-    if voice["engine"] == "chatterbox":
+    if voice["engine"] in {"chatterbox", "openvoice"}:
         directory = DATA / "voices" / identifier(voice_id)
         preview = directory / "preview.wav"
         shutil.copy2(path, preview)
@@ -328,3 +387,77 @@ def install_engine(job):
     )
     job.run([str(python), str(ROOT / "scripts/voice_worker.py"), "--prepare"])
     return engine_status()
+
+
+def optimize_cpu(job):
+    if not engine_status()["ready"]:
+        raise ValueError("Instala el motor de voz primero.")
+    job.update(
+        progress=5,
+        message="Comparando CPU original e INT8; esta medición tarda unos minutos…",
+    )
+    job.run([str(voice_python()), str(ROOT / "scripts/benchmark_voice_cpu.py")])
+    return engine_status()
+
+
+def install_openvoice(job):
+    python = voice_python()
+    if not python.exists():
+        job.run([sys.executable, "-m", "venv", str(ROOT / ".venv-voice")])
+    uv = shutil.which("uv")
+    prefix = (
+        [uv, "pip", "install", "--python", str(python)]
+        if uv
+        else [str(python), "-m", "pip", "install"]
+    )
+    job.update(progress=5, message="Instalando motor rápido de clonación para CPU…")
+    job.run(
+        prefix
+        + [
+            "torch==2.6.0",
+            "torchaudio==2.6.0",
+            "--index-url",
+            "https://download.pytorch.org/whl/cpu",
+        ]
+    )
+    job.run(
+        prefix
+        + [
+            "--no-deps",
+            "git+https://github.com/myshell-ai/OpenVoice.git@74a1d147b17a8c3092dd5430504bd83ef6c7eb23",
+            "git+https://github.com/myshell-ai/MeloTTS.git@209145371cff8fc3bd60d7be902ea69cbdb7965a",
+        ]
+    )
+    job.run(
+        prefix
+        + [
+            "numpy>=1.26,<2",
+            "librosa>=0.11,<0.12",
+            "soundfile>=0.13,<1",
+            "transformers>=4.46,<5",
+            "huggingface-hub<1",
+            "txtsplit",
+            "cached-path",
+            "num2words",
+            "gruut[es]==2.2.3",
+            "eng-to-ipa",
+            "inflect>=7,<8",
+            "unidecode",
+            "pypinyin",
+            "cn2an",
+            "jieba",
+            "wavmark",
+            "tqdm",
+        ]
+    )
+    job.update(progress=60, message="Descargando MeloTTS español y OpenVoice V2…")
+    job.run(
+        [
+            str(python),
+            "-X",
+            "utf8",
+            str(ROOT / "scripts/openvoice_worker.py"),
+            "--prepare",
+        ]
+    )
+    return openvoice_status()
