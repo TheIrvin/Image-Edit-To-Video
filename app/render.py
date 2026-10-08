@@ -72,12 +72,12 @@ def prepare_image(
     canvas.save(destination)
 
 
-def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=0):
+def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=0, max_zoom=1.15):
     # Aceleración y frenado continuos, también en el fotograma de reserva.
     # Las escenas breves recorren menos distancia para mantener una cámara lenta.
     t = f"min(1,on/{max(1, frames - 1)})"
     p = f"((1-cos(PI*{t}))/2)"
-    amount = min(0.06, 0.006 * max(0, (frames - 1) / fps))
+    amount = min(0.06, max_zoom - 1, 0.006 * max(0, (frames - 1) / fps))
     zoom = f"{amount:.6f}"
     forward = f"(0.15+0.7*{p})"
     backward = f"(0.85-0.7*{p})"
@@ -111,7 +111,8 @@ def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=
         amount = min(0.12, 0.009 * max(0, (frames - 1) / fps))
         if motion == "drift":
             amount *= 0.45
-        start, end = (1.025, 1.025 + amount)
+        start = min(1.025, max_zoom)
+        end = min(start + amount, max_zoom)
         if motion == "reveal":
             start, end = end, start
         z = f"{start:.6f}+({end-start:.6f})*{q}"
@@ -224,16 +225,26 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
     fps = settings["fps"]
     for n, ((index, scene), audio_path) in enumerate(zip(indexed, audio)):
         job.check()
+        from .vision import visual_scene
+        image_path = DATA / "projects" / project["id"] / "images" / scene["image"]
+        scene = visual_scene(image_path, scene)
         audio_duration = wav_duration(audio_path)
         frames, duration = segment_duration(
             audio_duration, settings["pause"], scene["extra_pause"], fps
         )
         motion, transition = scene_plan(scene, index, settings["seed"], duration)
+        if scene["motion"] == "auto" and duration >= 3.5:
+            analysis = scene["visual_analysis"]
+            if analysis["method"] == "center" and not scene["focus_manual"]:
+                motion = "still"
+            elif analysis["faces"] == 1 and motion == "drift":
+                motion = "push_focus"
+            elif analysis["faces"] > 1:
+                motion = "reveal"
         if previous is None:
             transition = "cut"
         incoming = min(settings["transition_duration"], duration * 0.25)
         base = work / f"base-{n}.png"
-        image_path = DATA / "projects" / project["id"] / "images" / scene["image"]
         prepare_image(image_path, base, width, height, scene, settings)
         clip = work / f"clip-{n:05}.mp4"
         job.update(
@@ -271,8 +282,12 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
                 0.5 + (focus[0] - 0.5) * sw * scale / width,
                 0.5 + (focus[1] - 0.5) * sh * scale / height,
             )
+        analysis = scene["visual_analysis"]
+        # Si ya hay que ampliar el original, reducir el zoom adicional.
+        native_scale = min(analysis["width"] / width, analysis["height"] / height)
+        max_zoom = 1 + 0.12 * min(1, native_scale * native_scale)
         current_filter = motion_filter(
-            motion, frames, width, height, fps, focus, scene["number"]
+            motion, frames, width, height, fps, focus, scene["number"], max_zoom
         )
         if transition != "cut":
             command += [

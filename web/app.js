@@ -1064,6 +1064,7 @@ function setupEvents() {
       selector.startsWith("#focus-") ? "input" : "change",
       () => {
         const value = $(selector).value;
+        if (key === "focus_x" || key === "focus_y") selectedScene().focus_manual = true;
         selectedScene()[key] = ["focus_x", "focus_y", "extra_pause"].includes(
           key,
         )
@@ -1140,6 +1141,11 @@ function setupEvents() {
     $("#focus-marker").style.top = `${scene.focus_y * 100}%`;
     $("#focus-dialog").showModal();
   };
+  $("#auto-focus").onclick = () => {
+    selectedScene().focus_manual = false;
+    markDirty();
+    toast("El encuadre usará el análisis visual local.");
+  };
   $("#focus-image").onclick = (event) => {
     const rect = event.target.getBoundingClientRect();
     const scene = selectedScene();
@@ -1151,6 +1157,7 @@ function setupEvents() {
       0,
       Math.min(1, (event.clientY - rect.top) / rect.height),
     );
+    scene.focus_manual = true;
     $("#focus-marker").style.left = `${scene.focus_x * 100}%`;
     $("#focus-marker").style.top = `${scene.focus_y * 100}%`;
     $("#focus-x").value = scene.focus_x;

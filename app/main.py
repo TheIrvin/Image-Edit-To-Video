@@ -206,6 +206,7 @@ def save_project(project_id: str, body: ProjectUpdate):
             "filter",
             "focus_x",
             "focus_y",
+            "focus_manual",
             "fit",
             "extra_pause",
         )
@@ -237,6 +238,9 @@ def scene_image(
     if s is None:
         raise FileNotFoundError("Escena inexistente.")
     source = core.DATA / "projects" / project_id / "images" / s["image"]
+    if aspect != "original":
+        from .vision import visual_scene
+        s = visual_scene(source, s)
     thumb_settings = (
         {}
         if aspect == "original"
@@ -250,7 +254,7 @@ def scene_image(
                 "image": s["image"],
                 "settings": thumb_settings,
                 "aspect": aspect,
-                "layout_version": 2,
+                "layout_version": 3,
             },
             sort_keys=True,
         ).encode()
