@@ -56,6 +56,7 @@ El modo opcional **Por número del archivo** usa el número final: `stick8.png`,
 ## Edición y sincronización
 
 - Movimientos lentos: acercamiento, alejamiento, recorridos horizontales/verticales, diagonales con zoom e imagen fija.
+- La cámara acelera y frena suavemente; las escenas cortas usan recorridos menores. Las imágenes de trabajo tienen más resolución para reducir los saltos de píxel, con un límite de 4096 px y sin cambiar la resolución de exportación.
 - Entradas: corte directo, fundido cruzado, fundido por negro, cortinillas, deslizamientos y apertura circular.
 - Filtros: original, cálido, frío, blanco y negro, sepia y cine suave.
 - Cada escena permite editar narración, movimiento, transición, filtro, encuadre, punto de interés y pausa adicional.

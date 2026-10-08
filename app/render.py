@@ -32,8 +32,10 @@ def prepare_image(
 ):
     with Image.open(source) as original:
         image = ImageOps.exif_transpose(original).convert("RGB")
-    # Margen para movimientos lentos, sin bordes negros.
-    factor = 1.15 if overscan else 1
+    # zoompan redondea las coordenadas a píxeles enteros. Una imagen de trabajo
+    # mayor reduce los saltos sin aumentar la resolución del vídeo exportado.
+    # El límite evita disparar el uso de memoria al exportar en 2K.
+    factor = min(2, 4096 / max(width, height)) if overscan else 1
     w, h = round(width * factor), round(height * factor)
     fit = settings["fit"] if scene["fit"] == "inherit" else scene["fit"]
     if fit == "blur":
@@ -71,24 +73,33 @@ def prepare_image(
 
 
 def motion_filter(motion, frames, width, height, fps):
-    p = f"on/{max(1, frames - 1)}"
-    z, x, y = "1.08", "(iw-iw/zoom)/2", "(ih-ih/zoom)/2"
+    # Aceleración y frenado continuos, también en el fotograma de reserva.
+    # Las escenas breves recorren menos distancia para mantener una cámara lenta.
+    t = f"min(1,on/{max(1, frames - 1)})"
+    p = f"((1-cos(PI*{t}))/2)"
+    amount = min(0.06, 0.006 * max(0, (frames - 1) / fps))
+    zoom = f"{amount:.6f}"
+    forward = f"(0.15+0.7*{p})"
+    backward = f"(0.85-0.7*{p})"
+    z, x, y = f"{1 + amount:.6f}", "(iw-iw/zoom)/2", "(ih-ih/zoom)/2"
     if motion == "zoom_in":
-        z = f"1+0.08*{p}"
+        z = f"1+{zoom}*{p}"
     elif motion == "zoom_out":
-        z = f"1.08-0.08*{p}"
+        z = f"1+{zoom}*(1-{p})"
     elif motion == "pan_right":
-        x = f"(iw-iw/zoom)*{p}"
+        x = f"(iw-iw/zoom)*{forward}"
     elif motion == "pan_left":
-        x = f"(iw-iw/zoom)*(1-{p})"
+        x = f"(iw-iw/zoom)*{backward}"
     elif motion == "pan_down":
-        y = f"(ih-ih/zoom)*{p}"
+        y = f"(ih-ih/zoom)*{forward}"
     elif motion == "pan_up":
-        y = f"(ih-ih/zoom)*(1-{p})"
+        y = f"(ih-ih/zoom)*{backward}"
     elif motion == "diagonal_in":
-        z, x, y = f"1+0.08*{p}", f"(iw-iw/zoom)*{p}", f"(ih-ih/zoom)*{p}"
+        z = f"1+{zoom}*{p}"
+        x, y = f"(iw-iw/zoom)*{forward}", f"(ih-ih/zoom)*{forward}"
     elif motion == "diagonal_out":
-        z, x, y = f"1.08-0.08*{p}", f"(iw-iw/zoom)*(1-{p})", f"(ih-ih/zoom)*(1-{p})"
+        z = f"1+{zoom}*(1-{p})"
+        x, y = f"(iw-iw/zoom)*{backward}", f"(ih-ih/zoom)*{backward}"
     elif motion == "still":
         z = "1"
     # Un fotograma de reserva permite a fps confirmar el último intervalo; el
