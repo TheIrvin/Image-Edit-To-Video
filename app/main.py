@@ -6,6 +6,7 @@ import os
 import platform
 import subprocess
 import sys
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
@@ -147,12 +148,29 @@ def projects():
         {k: p[k] for k in ("id", "name", "created", "updated", "revision")}
         | {"scenes": len(p["scenes"])}
         for p in sorted(items, key=lambda p: p["updated"], reverse=True)
+        if not p.get("cancelled")
     ]
 
 
 @app.get("/api/projects/{project_id}")
 def project(project_id: str):
     return core.get_project(project_id)
+
+
+@app.post("/api/projects/{project_id}/cancel")
+def cancel_project(project_id: str):
+    with core.LOCK:
+        current = core.get_project(project_id)
+        current["cancelled"] = True
+        core.write_json(core.DATA / "projects" / project_id / "project.json", current)
+        for path in (core.DATA / "jobs").glob("*.json"):
+            task = core.read_json(path)
+            if task.get("project_id") == project_id and task.get("status") in {
+                "queued",
+                "running",
+            }:
+                jobs.EVENTS.setdefault(task["id"], threading.Event()).set()
+    return {"ok": True}
 
 
 class ProjectUpdate(BaseModel):

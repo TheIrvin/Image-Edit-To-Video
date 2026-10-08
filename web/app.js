@@ -892,6 +892,30 @@ function openImport() {
   $("#import-error").textContent = "";
   $("#import-dialog").showModal();
 }
+async function cancelProject() {
+  if (!state.project) return;
+  const button = $("#cancel-project");
+  button.disabled = true;
+  clearTimeout(state.saveTimer);
+  try {
+    if (state.saving) await state.saving;
+    await api(`/api/projects/${state.project.id}/cancel`, "POST", {});
+    state.project = null;
+    state.dirty = false;
+    state.times = {};
+    state.selected = 0;
+    state.videoMode = false;
+    $("#video-player").pause();
+    $("#video-player").removeAttribute("src");
+    renderEditor();
+    await refreshProjects();
+    $("#import-form").reset();
+    openImport();
+    toast("Proyecto cancelado. Selecciona de nuevo la carpeta y el TXT.");
+  } finally {
+    button.disabled = false;
+  }
+}
 async function importProject(event) {
   event.preventDefault();
   const button = $("#import-form button[type=submit]");
@@ -942,6 +966,7 @@ function setupEvents() {
     (button) => (button.onclick = () => setPage(button.dataset.page)),
   );
   $("#new-project").onclick = openImport;
+  $("#cancel-project").onclick = report(cancelProject);
   $("#new-project-small").onclick = openImport;
   $("#import-form").onsubmit = importProject;
   $("#voice-form").onsubmit = importVoice;
