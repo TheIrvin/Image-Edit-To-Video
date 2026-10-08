@@ -47,7 +47,12 @@ def main():
             ),
             encoding="utf-8",
         )
-        temp.replace(progress)
+        for attempt in range(20):
+            try:
+                temp.replace(progress)
+                break
+            except PermissionError:
+                time.sleep(0.025)
 
     status(0, "Cargando el modelo de voz en CPU…")
     import numpy as np

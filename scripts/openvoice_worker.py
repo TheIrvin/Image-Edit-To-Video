@@ -53,7 +53,14 @@ def main():
                 ),
                 encoding="utf-8",
             )
-            temp.replace(path)
+            # Windows puede mantener abierto el progreso mientras la app lo lee.
+            # Un fallo temporal de telemetría nunca debe abortar la narración.
+            for attempt in range(20):
+                try:
+                    temp.replace(path)
+                    break
+                except PermissionError:
+                    time.sleep(0.025)
 
     status(0, "Cargando OpenVoice V2 + MeloTTS español…")
     import torch
