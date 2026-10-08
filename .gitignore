@@ -1,0 +1,13 @@
+.venv/
+.venv-voice/
+data/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+# Material personal ya presente en esta carpeta.
+branding/
+historias/
+SKILL/
+instrucciones-raro-imagenes.txt
+investigacion-nichos-poderosamente-raro.md

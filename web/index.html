@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Imagen a Historia · Estudio local</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%23edb86b%22/><path d=%22M20 17v30l28-15z%22 fill=%22%23151a22%22/></svg>"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Imagen a Historia, inicio"
+        ><span class="brand-icon">▰<span>▷</span></span
+        ><span>Imagen a Historia<small>ESTUDIO LOCAL</small></span></a
+      >
+      <p class="nav-label">TU ESPACIO</p>
+      <nav aria-label="Navegación principal">
+        <button class="nav-item active" data-page="studio">
+          <span>▣</span> Estudio <span class="nav-dot"></span>
+        </button>
+        <button class="nav-item" data-page="voices">
+          <span>≋</span> Biblioteca de voces
+        </button>
+        <button class="nav-item" data-page="history">
+          <span>◷</span> Videos e historial
+        </button>
+      </nav>
+      <div class="project-nav">
+        <div class="nav-label">
+          PROYECTOS
+          <button
+            class="icon-button"
+            id="new-project-small"
+            title="Nuevo proyecto"
+          >
+            ＋
+          </button>
+        </div>
+        <div id="project-list"></div>
+      </div>
+      <div class="sidebar-bottom">
+        <span class="status-dot"></span>
+        <div>
+          Todo queda en tu equipo<small id="hardware-info"
+            >Motor local · CPU</small
+          >
+        </div>
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div class="breadcrumb">
+          <span>Tu espacio</span><span>/</span
+          ><strong id="page-title">Estudio</strong>
+        </div>
+        <span class="local-tag">● LOCAL</span>
+      </header>
+      <section id="studio-page" class="page">
+        <div id="welcome">
+          <div class="welcome-copy">
+            <span class="eyebrow">DE IMÁGENES A HISTORIAS</span>
+            <h1>Tu historia,<br />en movimiento<span>.</span></h1>
+            <p>
+              Imágenes, una narración y tu voz.<br />Convierte tus escenas en un
+              video con ritmo propio.
+            </p>
+            <button class="button primary large" id="new-project">
+              ＋ Crear un proyecto</button
+            ><span class="welcome-note"
+              >Sin subir tus archivos · Sin suscripción</span
+            >
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="art-grid"></div>
+            <div class="art-frame frame-back"></div>
+            <div class="art-frame frame-front">
+              <div class="art-sun"></div>
+              <div class="mountain m-one"></div>
+              <div class="mountain m-two"></div>
+              <span class="art-play">▶</span>
+              <div class="art-time">00:03 / 00:12</div>
+            </div>
+            <div class="floating-tag"><span>↗</span> Movimiento lento</div>
+            <div class="floating-wave">
+              ▂ ▃ ▆ ▄ █ ▅ ▂ ▅ ▇ ▃ ▅ ▂ <span>Tu narración</span>
+            </div>
+          </div>
+          <div class="workflow">
+            <div>
+              <span>01</span><strong>Importa tus escenas</strong>
+              <p>Una carpeta y un TXT, con etiquetas o párrafos.</p>
+            </div>
+            <div>
+              <span>02</span><strong>Elige cómo contarlas</strong>
+              <p>Voz, movimientos, filtros y encuadre.</p>
+            </div>
+            <div>
+              <span>03</span><strong>Revisa y exporta</strong>
+              <p>Horizontal o vertical, hasta 2K.</p>
+            </div>
+          </div>
+        </div>
+        <div id="editor" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">MESA DE EDICIÓN</span
+              ><input
+                class="project-title"
+                id="project-name"
+                aria-label="Nombre del proyecto"
+              />
+              <p id="project-summary"></p>
+            </div>
+            <div class="heading-actions">
+              <span id="save-state">Guardado</span
+              ><button class="button secondary" id="save-project">
+                Guardar</button
+              ><button class="button primary" id="export-video">
+                ↗ Exportar video
+              </button>
+            </div>
+          </div>
+          <div id="project-warnings" class="notice" hidden></div>
+          <div class="editor-grid">
+            <section class="panel scenes-panel">
+              <div class="panel-heading">
+                <h2>Escenas <span id="scene-count" class="count"></span></h2>
+                <button
+                  class="icon-button"
+                  id="reset-auto"
+                  title="Restablecer movimientos y transiciones automáticos"
+                >
+                  ↺
+                </button>
+              </div>
+              <div class="scene-search">
+                <input
+                  id="scene-search"
+                  placeholder="Buscar escena o texto…"
+                  aria-label="Buscar escenas"
+                />
+              </div>
+              <div id="scene-list" class="scene-list"></div>
+              <div class="scene-footer">
+                El orden se conserva durante el video.
+              </div>
+            </section>
+            <div class="canvas-column">
+              <section class="panel canvas-panel">
+                <div class="panel-heading">
+                  <h2 id="canvas-title">Vista del encuadre</h2>
+                  <div class="segmented" id="aspect-controls">
+                    <button data-aspect="16:9" class="selected">16:9</button
+                    ><button data-aspect="9:16">9:16</button>
+                  </div>
+                </div>
+                <div class="canvas-stage">
+                  <div id="image-canvas" class="image-canvas">
+                    <img id="scene-image" alt="Escena seleccionada" />
+                  </div>
+                  <video
+                    id="video-player"
+                    controls
+                    playsinline
+                    preload="metadata"
+                    hidden
+                  ></video>
+                  <div id="canvas-placeholder">Selecciona una escena</div>
+                </div>
+                <div class="canvas-footer">
+                  <span id="canvas-caption">Vista de encuadre · sin audio</span
+                  ><button class="text-button" id="back-to-image" hidden>
+                    Volver a la imagen</button
+                  ><button class="button secondary small" id="preview-scene">
+                    ▶ Previsualizar escena
+                  </button>
+                </div>
+              </section>
+              <section class="panel scene-settings">
+                <div class="panel-heading">
+                  <h2 id="selected-scene-label">Editar escena</h2>
+                  <span class="muted" id="selected-duration"></span>
+                </div>
+                <label class="field-label" for="scene-text"
+                  >Narración de esta imagen</label
+                ><textarea
+                  id="scene-text"
+                  rows="4"
+                  spellcheck="true"
+                ></textarea>
+                <div class="control-grid">
+                  <label>Movimiento<select id="scene-motion"></select></label
+                  ><label
+                    >Entrada de la imagen<select
+                      id="scene-transition"
+                    ></select></label
+                  ><label
+                    >Color / filtro<select id="scene-filter"></select></label
+                  ><label
+                    >Encuadre<select id="scene-fit">
+                      <option value="inherit">Usar ajuste del video</option>
+                      <option value="crop">Recorte con punto de interés</option>
+                      <option value="blur">
+                        Imagen completa + fondo suave
+                      </option>
+                    </select></label
+                  >
+                </div>
+                <div class="focus-row">
+                  <div>
+                    <span class="field-label">Punto de interés</span
+                    ><small
+                      >Ubica el rostro u objeto que quieres conservar.</small
+                    >
+                  </div>
+                  <button class="button secondary small" id="choose-focus">
+                    ◎ Elegir en la imagen
+                  </button>
+                </div>
+                <div class="focus-sliders">
+                  <label
+                    >Horizontal
+                    <input
+                      id="focus-x"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                    /><output id="focus-x-value">50%</output></label
+                  ><label
+                    >Vertical
+                    <input
+                      id="focus-y"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                    /><output id="focus-y-value">50%</output></label
+                  >
+                </div>
+                <div class="scene-bottom">
+                  <label
+                    >Pausa adicional
+                    <input
+                      id="extra-pause"
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                    />
+                    s</label
+                  >
+                  <div>
+                    <button class="text-button" id="apply-filter">
+                      Filtro a todas</button
+                    ><button class="text-button" id="apply-transition">
+                      Transición a todas
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <section class="panel output-panel">
+              <div class="panel-heading">
+                <h2>Tu video</h2>
+                <span class="tiny-tag">MP4</span>
+              </div>
+              <div class="output-body">
+                <label>Voz narradora<select id="voice-select"></select></label
+                ><button class="text-button" id="manage-voices">
+                  ≋ Administrar voces
+                </button>
+                <hr />
+                <label
+                  >Resolución<select id="resolution">
+                    <option value="720">720 · HD</option>
+                    <option value="1080">1080 · Full HD</option>
+                    <option value="1260">1260 · personalizado</option>
+                    <option value="2k">2K · QHD 1440</option>
+                  </select></label
+                >
+                <p class="field-help" id="output-dimensions"></p>
+                <label
+                  >Ajuste de las imágenes<select id="global-fit">
+                    <option value="crop">Llenar encuadre · recorte</option>
+                    <option value="blur">Imagen completa · fondo suave</option>
+                  </select></label
+                ><label
+                  >Fotogramas por segundo<select id="fps">
+                    <option value="30">30 fps</option>
+                    <option value="24">24 fps</option>
+                  </select></label
+                >
+                <hr />
+                <label
+                  >Margen después de cada audio
+                  <div class="input-unit">
+                    <input
+                      type="number"
+                      id="pause"
+                      step="0.05"
+                      min="0"
+                      max="3"
+                    /><span>segundos</span>
+                  </div></label
+                >
+                <p class="field-help">
+                  Un audio de 3 s mantiene su imagen al menos 3,1 s con el
+                  margen predeterminado.
+                </p>
+                <label
+                  >Duración de las transiciones
+                  <div class="input-unit">
+                    <input
+                      type="number"
+                      id="transition-duration"
+                      step="0.05"
+                      min="0.05"
+                      max="1"
+                    /><span>segundos</span>
+                  </div></label
+                ><label
+                  >Velocidad de la voz<select id="speed">
+                    <option value="0.8">0,8× · pausada</option>
+                    <option value="0.9">0,9×</option>
+                    <option value="1">1× · original</option>
+                    <option value="1.1">1,1×</option>
+                    <option value="1.25">1,25× · rápida</option>
+                  </select></label
+                ><label class="checkbox-label"
+                  ><input type="checkbox" id="subtitles" /> Incluir descarga de
+                  SRT por escena</label
+                >
+                <hr />
+                <button class="button secondary full" id="measure-audio">
+                  ≋ Preparar y medir narración</button
+                ><button class="button secondary full" id="preview-video">
+                  ▶ Vista previa del video
+                </button>
+                <p class="field-help">
+                  La vista previa usa 720. Las duraciones se calculan con el
+                  audio real; no se superponen voces.
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+      <section id="voices-page" class="page" hidden>
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">UNA VOZ PARA CADA HISTORIA</span>
+            <h1>Biblioteca de voces<span>.</span></h1>
+            <p>
+              Guarda tus voces, escucha sus ejemplos y reutilízalas en cualquier
+              proyecto.
+            </p>
+          </div>
+          <button class="button primary" id="new-voice">
+            ＋ Guardar una voz
+          </button>
+        </div>
+        <div class="engine-card">
+          <div class="engine-icon">≋</div>
+          <div>
+            <h2>
+              Chatterbox Multilingual
+              <span id="engine-badge" class="tiny-tag">CPU</span>
+            </h2>
+            <p id="engine-note">
+              Clonación local en español a partir de una muestra de voz.
+            </p>
+          </div>
+          <button class="button secondary" id="install-engine">
+            Instalar motor local
+          </button>
+        </div>
+        <div class="voice-example">
+          <label for="example-text">Texto para probar tus voces</label
+          ><textarea id="example-text" rows="2" maxlength="700">
+La noche había caído sobre la ciudad. Nadie imaginaba que aquella decisión cambiaría su historia para siempre.</textarea
+          >
+        </div>
+        <div id="voice-list" class="voice-grid"></div>
+      </section>
+      <section id="history-page" class="page" hidden>
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">TUS HISTORIAS TERMINADAS</span>
+            <h1>Videos e historial<span>.</span></h1>
+            <p>
+              Cada versión se guarda por separado, junto con su configuración y
+              sus tiempos.
+            </p>
+          </div>
+          <button class="button secondary" id="refresh-history">
+            ↻ Actualizar
+          </button>
+        </div>
+        <div class="segmented history-filter">
+          <button class="selected" data-history="exports">Exportaciones</button
+          ><button data-history="previews">Vistas previas</button
+          ><button data-history="jobs">Tareas</button>
+        </div>
+        <div id="history-list" class="history-grid"></div>
+      </section>
+      <div id="job-dock" class="job-dock" hidden>
+        <div class="job-icon">◌</div>
+        <div class="job-info">
+          <strong id="job-title"></strong><span id="job-message"></span>
+          <div class="progress-track"><div id="job-progress"></div></div>
+        </div>
+        <span id="job-percent"></span
+        ><button class="text-button" id="cancel-job">Cancelar</button>
+      </div>
+    </main>
+    <dialog id="import-dialog">
+      <form id="import-form">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">EMPIEZA CON TUS ARCHIVOS</span>
+            <h2>Nuevo proyecto</h2>
+          </div>
+          <button
+            type="button"
+            class="icon-button close-dialog"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <label
+          >Nombre del proyecto<input
+            id="import-name"
+            placeholder="Mi próxima historia" /></label
+        ><label
+          >Carpeta de imágenes
+          <div class="file-field">
+            <input
+              id="import-folder"
+              placeholder="Selecciona o pega la ruta de la carpeta"
+              required
+            /><button
+              type="button"
+              class="button secondary"
+              data-pick="folder"
+              data-target="import-folder"
+            >
+              Examinar
+            </button>
+          </div></label
+        ><label
+          >Archivo de narración (.txt)
+          <div class="file-field">
+            <input
+              id="import-script"
+              placeholder="Selecciona o pega la ruta del TXT"
+              required
+            /><button
+              type="button"
+              class="button secondary"
+              data-pick="script"
+              data-target="import-script"
+            >
+              Examinar
+            </button>
+          </div></label
+        ><label
+          >Cómo emparejar las imágenes<select id="import-pairing">
+            <option value="order">Por orden · la primera imagen es img1</option>
+            <option value="number">
+              Por número del archivo · stick8 es img8
+            </option>
+          </select></label
+        >
+        <div class="import-tip">
+          <strong>Dos formatos de narración</strong>
+          <p>
+            Usa <code>img1:</code>, <code>img2:</code>… o separa cada escena con
+            una línea en blanco. Los separadores nunca se narran.
+          </p>
+          <p>
+            En el modo por orden, <code>stick8.png</code> puede ser la primera
+            imagen de <code>img1:</code>. El orden es natural: 8, 9, 10.
+          </p>
+        </div>
+        <p id="import-error" class="form-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" class="button secondary close-dialog">
+            Cancelar</button
+          ><button type="submit" class="button primary">
+            Importar y revisar →
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="voice-dialog">
+      <form id="voice-form">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">TU BIBLIOTECA PERSONAL</span>
+            <h2>Guardar una voz</h2>
+          </div>
+          <button
+            type="button"
+            class="icon-button close-dialog"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <label
+          >Nombre<input
+            id="voice-name"
+            placeholder="Narrador tranquilo"
+            required
+            maxlength="100" /></label
+        ><label
+          >Muestra de voz
+          <div class="file-field">
+            <input
+              id="voice-reference"
+              placeholder="WAV, MP3, M4A, FLAC u OGG"
+              required
+            /><button
+              type="button"
+              class="button secondary"
+              data-pick="voice"
+              data-target="voice-reference"
+            >
+              Examinar
+            </button>
+          </div></label
+        >
+        <div class="import-tip">
+          <strong>Una buena muestra hace la diferencia</strong>
+          <p>
+            Elige 8–15 segundos de voz limpia, sin música, ruido ni otras
+            personas. Usa tu propia voz o una que tengas permiso para usar.
+          </p>
+          <p>
+            Se guarda un perfil con su muestra. Puedes mantener 10 voces o más y
+            generar un ejemplo para cada una.
+          </p>
+        </div>
+        <p id="voice-error" class="form-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" class="button secondary close-dialog">
+            Cancelar</button
+          ><button type="submit" class="button primary">Guardar voz</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="focus-dialog" class="focus-dialog">
+      <div class="dialog-heading">
+        <div>
+          <h2>Elige el punto de interés</h2>
+          <p>
+            Haz clic sobre el rostro u objeto que debe conservar el recorte.
+          </p>
+        </div>
+        <button class="icon-button close-dialog" aria-label="Cerrar">×</button>
+      </div>
+      <div class="focus-picker">
+        <img
+          id="focus-image"
+          alt="Imagen original para elegir el punto de interés"
+        /><span id="focus-marker">＋</span>
+      </div>
+      <div class="dialog-actions">
+        <button class="button primary close-dialog">Listo</button>
+      </div>
+    </dialog>
+    <dialog id="watch-dialog" class="watch-dialog">
+      <div class="dialog-heading">
+        <div>
+          <h2 id="watch-title">Video</h2>
+          <p id="watch-meta"></p>
+        </div>
+        <button class="icon-button close-dialog" aria-label="Cerrar">×</button>
+      </div>
+      <video id="history-player" controls playsinline></video>
+      <div class="dialog-actions">
+        <a id="watch-download" class="button primary">↓ Descargar MP4</a
+        ><button class="button secondary close-dialog">Cerrar</button>
+      </div>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>
