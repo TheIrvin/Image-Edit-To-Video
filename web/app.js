@@ -206,6 +206,22 @@ function renderEditor() {
   renderCanvas();
   updateDimensions();
 }
+let draggedSceneNumber = null;
+function moveScene(number, targetNumber, after = false) {
+  const scenes = state.project.scenes;
+  const selected = selectedScene();
+  const from = scenes.findIndex((scene) => scene.number === number);
+  if (from < 0 || number === targetNumber) return;
+  const [scene] = scenes.splice(from, 1);
+  const target = scenes.findIndex((item) => item.number === targetNumber);
+  scenes.splice(target + (after ? 1 : 0), 0, scene);
+  state.selected = scenes.indexOf(selected);
+  state.videoMode = false;
+  markDirty();
+  renderSceneList();
+  renderSceneControls();
+  renderCanvas();
+}
 function renderSceneList() {
   if (!state.project) return;
   const query = $("#scene-search").value.trim().toLowerCase();
@@ -228,12 +244,68 @@ function renderSceneList() {
         renderSceneList();
       },
     });
+    button.draggable = true;
+    button.title = "Arrastra para cambiar el orden · Alt + ↑ / ↓ para mover";
+    button.addEventListener("dragstart", (event) => {
+      draggedSceneNumber = scene.number;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(scene.number));
+      button.classList.add("dragging");
+    });
+    button.addEventListener("dragover", (event) => {
+      if (draggedSceneNumber === null || draggedSceneNumber === scene.number)
+        return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const after =
+        event.clientY >
+        button.getBoundingClientRect().top + button.offsetHeight / 2;
+      button.classList.toggle("drop-before", !after);
+      button.classList.toggle("drop-after", after);
+      const panel = $("#scene-list");
+      const bounds = panel.getBoundingClientRect();
+      if (event.clientY < bounds.top + 45) panel.scrollTop -= 12;
+      else if (event.clientY > bounds.bottom - 45) panel.scrollTop += 12;
+    });
+    button.addEventListener("dragleave", () =>
+      button.classList.remove("drop-before", "drop-after"),
+    );
+    button.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const after = button.classList.contains("drop-after");
+      if (draggedSceneNumber !== null)
+        moveScene(draggedSceneNumber, scene.number, after);
+      draggedSceneNumber = null;
+    });
+    button.addEventListener("dragend", () => {
+      draggedSceneNumber = null;
+      $("#scene-list")
+        .querySelectorAll(".scene-item")
+        .forEach((item) =>
+          item.classList.remove("dragging", "drop-before", "drop-after"),
+        );
+    });
+    button.addEventListener("keydown", (event) => {
+      if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key))
+        return;
+      event.preventDefault();
+      const down = event.key === "ArrowDown";
+      const target = state.project.scenes[index + (down ? 1 : -1)];
+      if (target) {
+        moveScene(scene.number, target.number, down);
+        $("#scene-list")
+          .querySelector(`[data-scene-number="${scene.number}"]`)
+          ?.focus();
+      }
+    });
+    button.dataset.sceneNumber = scene.number;
     button.append(
       element("img", {
         class: "scene-thumb",
         src: imageUrl(scene),
         alt: "",
         loading: "lazy",
+        draggable: "false",
       }),
     );
     const details = element("div", { class: "scene-description" });

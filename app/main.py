@@ -198,6 +198,9 @@ def save_project(project_id: str, body: ProjectUpdate):
             for key in editable:
                 if key in by_number[scene["number"]]:
                     scene[key] = by_number[scene["number"]][key]
+        # El número identifica la pareja original; la lista define el montaje.
+        originals = {scene["number"]: scene for scene in current["scenes"]}
+        current["scenes"] = [originals[scene["number"]] for scene in body.scenes]
         current["name"] = body.name.strip()[:120] or current["name"]
         core.validate_project(current)
         current.update(revision=current["revision"] + 1, updated=time.time())

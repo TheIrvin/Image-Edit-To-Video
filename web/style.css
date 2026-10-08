@@ -694,6 +694,19 @@ main {
 .scene-item:hover {
   background: #232c37;
 }
+.scene-item[draggable="true"] {
+  cursor: grab;
+}
+.scene-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.scene-item.drop-before {
+  border-top: 3px solid var(--accent);
+}
+.scene-item.drop-after {
+  border-bottom: 3px solid var(--accent);
+}
 .scene-item.active {
   background: #312b23;
   border-color: #655338;
