@@ -75,7 +75,7 @@ La app genera archivos reales en **16:9** y **9:16**, con 24 o 30 fps. El reprod
 Para convertir imágenes horizontales a vertical:
 
 - **Recorte:** llena el encuadre y permite elegir el punto de interés con un clic en la imagen original. Es útil para conservar un rostro u objeto.
-- **Imagen completa + fondo suave:** conserva la imagen original completa sobre una copia desenfocada y oscurecida, con margen para el movimiento.
+- **Imagen completa + fondo suave:** ajusta la imagen al encuadre sobre una copia desenfocada y oscurecida. En 9:16, las imágenes horizontales ocupan todo el ancho y el fondo completa el espacio superior e inferior.
 
 Puedes elegir un ajuste global y sobrescribirlo por escena. Exportación H.264 + AAC, compatible con reproductores habituales:
 

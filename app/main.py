@@ -229,6 +229,7 @@ def scene_image(
                 "image": s["image"],
                 "settings": thumb_settings,
                 "aspect": aspect,
+                "layout_version": 2,
             },
             sort_keys=True,
         ).encode()

@@ -44,9 +44,9 @@ def prepare_image(
             ImageFilter.GaussianBlur(max(12, w / 45))
         )
         canvas = ImageEnhance.Brightness(canvas).enhance(0.55)
-        # El sujeto completo conserva un margen incluso durante el zoom.
+        # Las imágenes horizontales ocupan todo el ancho del encuadre vertical.
         foreground = ImageOps.contain(
-            image, (round(w * 0.86), round(h * 0.86)), Image.Resampling.LANCZOS
+            image, (w, h), Image.Resampling.LANCZOS
         )
         canvas.paste(
             foreground, ((w - foreground.width) // 2, (h - foreground.height) // 2)

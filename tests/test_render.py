@@ -26,6 +26,21 @@ def test_focus_crop_preserves_point_at_edges():
     assert render.crop_box(1600, 900, 9 / 16, 1, 0.5)[2] == 1600
 
 
+@pytest.mark.parametrize("overscan", [False, True])
+def test_vertical_blur_foreground_fills_width(tmp_path, overscan):
+    source = tmp_path / "landscape.png"
+    destination = tmp_path / "vertical.png"
+    Image.new("RGB", (1600, 900), "white").save(source)
+    scene = {"fit": "inherit", "focus_x": 0.5, "focus_y": 0.5, "filter": "none"}
+    render.prepare_image(
+        source, destination, 180, 320, scene, {"fit": "blur"}, overscan=overscan
+    )
+    with Image.open(destination) as image:
+        assert image.getpixel((0, image.height // 2)) == (255, 255, 255)
+        assert image.getpixel((image.width - 1, image.height // 2)) == (255, 255, 255)
+        assert image.getpixel((image.width // 2, 0))[0] < 200
+
+
 @pytest.mark.parametrize("aspect", ["16:9", "9:16"])
 def test_real_ffmpeg_transitions_have_exact_frames_and_unmixed_audio(
     tmp_path, monkeypatch, aspect
