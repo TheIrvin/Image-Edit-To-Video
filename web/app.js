@@ -20,7 +20,9 @@ const state = {
   videoMode: false,
 };
 const motions = {
-  auto: "Automático · narrativo",
+  auto: "Automático · dinámico y variado",
+  punch_in: "Acercamiento rápido + pausa",
+  arc: "Recorrido en arco",
   push_focus: "Acercamiento al punto de interés",
   reveal: "Revelar el entorno",
   drift: "Desplazamiento con acercamiento sutil",
@@ -514,7 +516,7 @@ async function pollJobs() {
   }
 }
 async function completeJob(job) {
-  if (["install", "cpu-optimize", "openvoice-install", "openvoice-optimize"].includes(job.kind)) {
+  if (["install", "cpu-optimize", "openvoice-install", "openvoice-optimize", "moss-install", "supertonic-install", "scylla-install", "kokoro-install"].includes(job.kind)) {
     await refreshStatus();
     toast(
       job.kind === "cpu-optimize"
@@ -622,6 +624,27 @@ async function refreshStatus() {
     ? "Motor instalado ✓"
     : "Instalar motor local";
   $("#install-engine").disabled = state.status.engine.ready;
+  for (const [engine, label] of [["moss", "MOSS ONNX"]]) {
+    const ready = !!state.status.engine[engine]?.ready;
+    $(`#voice-engine option[value="${engine}"]`).disabled = !ready;
+    $(`#install-${engine}`).disabled = ready;
+    $(`#install-${engine}`).textContent = ready ? `${label} instalado` : `Instalar ${label}`;
+    const parameters = state.status.engine[engine]?.profile?.parameters;
+    const size = parameters ? ` · ${(parameters / 1000000).toLocaleString("es", { maximumFractionDigits: 1 })}M parámetros` : "";
+    $(`#${engine}-note`).textContent = ready ? `Listo · CPU${size} · Disponible para clonar voces.` : "Clonación local en español. Instala el modelo para habilitar sus voces.";
+  }
+  for (const [engine, label] of [["supertonic", "Supertonic 3"], ["scylla", "Scylla v2"], ["kokoro", "Kokoro 82M"]]) {
+    const status = state.status.engine[engine];
+    const ready = !!status?.ready;
+    $(`#install-${engine}`).disabled = ready;
+    $(`#install-${engine}`).textContent = ready ? `${label} instalado` : `Instalar ${label}`;
+    const parameters = status?.profile?.parameters;
+    const size = parameters ? ` · ${(parameters / 1000000).toLocaleString("es", { maximumFractionDigits: 1 })}M parámetros` : "";
+    $(`#${engine}-note`).textContent = ready ? `Listo · CPU${size} · Voces predefinidas en español, sin clonación. Prueba sus voces abajo.` : "Voces predefinidas en español para CPU. Sin clonación de muestras.";
+  }
+  const cloneReady = !!state.status.engine["supertonic-clone"]?.ready;
+  $('#voice-engine option[value="supertonic-clone"]').disabled = !cloneReady;
+  $('#supertonic-clone-note').textContent = cloneReady ? "Listo · CPU · 105,8M parámetros · Disponible en Guardar una voz. Adaptación experimental; preparación única de varios minutos." : "Clonador comunitario pendiente de instalación.";
   const openvoiceReady = state.status.engine.openvoice?.ready;
   const acceleration = state.status.engine.openvoice?.acceleration;
   $("#optimize-openvoice").disabled = !openvoiceReady || !!acceleration?.enabled;
@@ -633,7 +656,7 @@ async function refreshStatus() {
     : "Instalar OpenVoice V2";
   $("#openvoice-note").textContent = openvoiceReady
     ? "Clonación local en español. Prueba un ejemplo para comparar la voz."
-    : "Motor alternativo para CPU. Descarga inicial de modelos y dependencias.";
+    : "Opción predeterminada. Instala sus modelos para usarla; el tiempo depende de tu procesador y del texto.";
   $("#optimize-cpu").disabled = !state.status.engine.ready;
   const profile = state.status.engine.cpu_profile;
   if (profile?.threads)
@@ -683,9 +706,49 @@ function renderVoices() {
       element(
         "small",
         {},
-        `${voice.kind} · ${voice.language}${voice.engine === "chatterbox" ? ` · muestra de ${seconds(voice.sample_duration)}` : ""}`,
+        `${voice.kind} · ${voice.engine} · ${voice.language}${voice.engine === "chatterbox" ? ` · muestra de ${seconds(voice.sample_duration)}` : ""}`,
       ),
     );
+    if (voice.engine !== "sapi") {
+      const renameButton = element("button", {
+        type: "button", class: "text-button",
+        onclick: () => {
+          renameButton.hidden = true;
+          const input = element("input", {
+            type: "text", value: voice.name, maxlength: "100", required: "",
+            "aria-label": "Nombre de la voz",
+          });
+          const error = element("small", { role: "alert", class: "form-error" });
+          const form = element("form");
+          const save = element("button", { type: "submit", class: "button secondary small" }, "Guardar nombre");
+          const cancel = element("button", {
+            type: "button", class: "text-button",
+            onclick: () => { form.remove(); renameButton.hidden = false; renameButton.focus(); },
+          }, "Cancelar");
+          form.append(input, save, cancel, error);
+          form.onsubmit = async (event) => {
+            event.preventDefault();
+            const value = input.value.trim();
+            if (!value) { error.textContent = "Escribe un nombre."; return; }
+            save.disabled = true;
+            cancel.disabled = true;
+            try {
+              await api(`/api/voices/${voice.id}`, "PATCH", { name: value });
+              await refreshVoices();
+              toast("Nombre de voz actualizado.");
+            } catch (failure) {
+              error.textContent = failure.message;
+              save.disabled = false;
+              cancel.disabled = false;
+            }
+          };
+          name.append(form);
+          input.focus();
+          input.select();
+        },
+      }, "Editar nombre");
+      name.append(renameButton);
+    }
     top.append(
       element(
         "div",
@@ -695,7 +758,7 @@ function renderVoices() {
       name,
     );
     card.append(top);
-    if (["chatterbox", "openvoice"].includes(voice.engine)) {
+    if (["chatterbox", "openvoice", "moss", "supertonic-clone"].includes(voice.engine)) {
       card.append(
         element("span", { class: "sample-label" }, "Muestra original"),
         element("audio", {
@@ -715,24 +778,9 @@ function renderVoices() {
         }),
       );
     }
+    if (voice.preview_generation_seconds != null)
+      card.append(element("p", {class: "muted"}, `Último ejemplo: ${seconds(voice.preview_duration)} de audio · preparado en ${seconds(voice.preview_generation_seconds)} (incluye carga o caché)`));
     const actions = element("div", { class: "voice-card-actions" });
-    if (voice.engine === "chatterbox" && state.status.engine.openvoice?.ready)
-      actions.append(
-        element(
-          "button",
-          {
-            class: "button secondary small",
-            onclick: report(async () =>
-              trackJob(
-                await api(`/api/voices/${voice.id}/openvoice`, "POST", {
-                  text: $("#example-text").value,
-                }),
-              ),
-            ),
-          },
-          "Probar en OpenVoice",
-        ),
-      );
     actions.append(
       element(
         "button",
@@ -765,11 +813,11 @@ function renderVoices() {
         element(
           "span",
           { class: "muted" },
-          voice.engine === "sapi" ? "Sin clonación" : "Perfil local",
+          voice.engine === "sapi" ? "Sin clonación" : ["supertonic", "scylla", "kokoro"].includes(voice.engine) ? "Voz predefinida" : "Perfil local",
         ),
       );
     card.append(actions);
-    if (["chatterbox", "openvoice"].includes(voice.engine))
+    if (["chatterbox", "openvoice", "moss", "supertonic-clone", "supertonic", "scylla", "kokoro"].includes(voice.engine))
       card.append(
         element(
           "button",
@@ -1009,6 +1057,8 @@ async function importVoice(event) {
       name: $("#voice-name").value.trim(),
       reference: $("#voice-reference").value.trim(),
       engine: $("#voice-engine").value,
+      reference_text: $("#voice-reference-text").value.trim(),
+      clone_effort: $("#clone-effort").value,
     });
     $("#voice-dialog").close();
     trackJob(job);
@@ -1020,6 +1070,10 @@ async function importVoice(event) {
   }
 }
 function setupEvents() {
+  $('#voice-engine').onchange = () => {
+    $('#clone-effort-label').hidden = $('#voice-engine').value !== 'supertonic-clone';
+    $('#voice-reference-text').required = false;
+  };
   options($("#scene-motion"), motions);
   options($("#scene-transition"), transitions);
   options($("#scene-filter"), filters);
@@ -1042,6 +1096,7 @@ function setupEvents() {
   );
   $("#new-voice").onclick = () => {
     $("#voice-error").textContent = "";
+    $('#voice-engine').onchange();
     $("#voice-dialog").showModal();
   };
   $("#watch-dialog").addEventListener("close", () =>
@@ -1204,6 +1259,10 @@ function setupEvents() {
   $("#optimize-cpu").onclick = report(async () => {
     trackJob(await api("/api/engine/optimize", "POST", {}));
   });
+  for (const engine of ["moss"])
+    $(`#install-${engine}`).onclick = report(async () => trackJob(await api(`/api/engine/light/${engine}/install`, "POST", {})));
+  for (const engine of ["supertonic", "scylla", "kokoro"])
+    $(`#install-${engine}`).onclick = report(async () => trackJob(await api(`/api/engine/preset/${engine}/install`, "POST", {})));
   $("#install-openvoice").onclick = report(async () =>
     trackJob(await api("/api/engine/openvoice/install", "POST", {})),
   );

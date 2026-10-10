@@ -9,7 +9,7 @@
       href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22%23edb86b%22/><path d=%22M20 17v30l28-15z%22 fill=%22%23151a22%22/></svg>"
     />
     <link rel="stylesheet" href="/static/style.css" />
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=voice-names-openvoice-1" defer></script>
   </head>
   <body>
     <aside class="sidebar">
@@ -405,6 +405,11 @@
             Acelerar con OpenVINO
           </button>
         </div>
+        <div class="engine-card"><div><h2>MOSS-TTS-Nano ONNX</h2><p id="moss-note">Clonación local en español con ONNX CPU.</p></div><button class="button secondary" id="install-moss">Instalar MOSS ONNX</button></div>
+        <div class="engine-card"><div><h2>Supertonic 3 · español</h2><p id="supertonic-note">Voces predefinidas para narración en CPU.</p></div><button class="button secondary" id="install-supertonic">Instalar Supertonic 3</button></div>
+        <div class="engine-card"><div><h2>Scylla’s Band v2 · español</h2><p id="scylla-note">Voces predefinidas con energía expresiva.</p></div><button class="button secondary" id="install-scylla">Instalar Scylla v2</button></div>
+        <div class="engine-card"><div><h2>Kokoro 82M · español</h2><p id="kokoro-note">Voces Dora, Alex y Santa para narración local.</p></div><button class="button secondary" id="install-kokoro">Instalar Kokoro</button></div>
+        <div class="engine-card"><div><h2>Supertonic 3 · clonador comunitario</h2><p id="supertonic-clone-note">Adaptación experimental de timbre y tono desde tu muestra.</p></div></div>
         <div class="voice-example">
           <label for="example-text">Texto para probar tus voces</label
           ><textarea id="example-text" rows="2" maxlength="700">
@@ -513,6 +518,7 @@ La noche había caído sobre la ciudad. Nadie imaginaba que aquella decisión ca
             En el modo por orden, <code>stick8.png</code> puede ser la primera
             imagen de <code>img1:</code>. El orden es natural: 8, 9, 10.
           </p>
+          <p>Si tus imágenes vienen con un guion de sincronización, elige <code>imagenes/guion-video.txt</code>. Ese archivo agrupa el texto por imagen; los párrafos del relato pueden ser más numerosos.</p>
         </div>
         <p id="import-error" class="form-error" role="alert"></p>
         <div class="dialog-actions">
@@ -576,12 +582,16 @@ La noche había caído sobre la ciudad. Nadie imaginaba que aquella decisión ca
         <p id="voice-error" class="form-error" role="alert"></p>
         <label
           >Motor de clonación<select id="voice-engine">
-            <option value="openvoice">OpenVoice V2 · español · rápido</option>
+            <option value="openvoice" selected>OpenVoice V2 · español · predeterminado</option>
             <option value="chatterbox">
               Chatterbox · multilingüe · pesado
             </option>
+            <option value="supertonic-clone" disabled>Supertonic 3 · clonador comunitario · experimental</option>
+            <option value="moss" disabled>MOSS Nano ONNX · español · CPU</option>
           </select></label
         >
+        <label>Transcripción de la muestra (opcional)<textarea id="voice-reference-text" rows="3" maxlength="6000" placeholder="Texto exacto de la muestra de voz (opcional)."></textarea></label>
+        <label id="clone-effort-label" hidden>Adaptación Supertonic<select id="clone-effort"><option value="fast">Rápida · 30 pasos</option><option value="balanced" selected>Equilibrada · 60 pasos</option><option value="deep">Profunda · 200 pasos</option></select><small>Se prepara una vez; puede tardar varios minutos. La transcripción exacta ayuda a ajustar el ritmo. La emoción y el parecido no están garantizados.</small></label>
         <div class="dialog-actions">
           <button type="button" class="button secondary close-dialog">
             Cancelar</button

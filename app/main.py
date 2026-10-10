@@ -43,7 +43,10 @@ async def same_origin(request: Request, call_next):
                 {"detail": "Solo se aceptan acciones desde esta app local."},
                 status_code=403,
             )
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.exception_handler(ValueError)
@@ -254,7 +257,7 @@ def scene_image(
                 "image": s["image"],
                 "settings": thumb_settings,
                 "aspect": aspect,
-                "layout_version": 3,
+                "layout_version": 5,
             },
             sort_keys=True,
         ).encode()
@@ -348,7 +351,9 @@ def voices():
 class VoiceImport(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     reference: str
-    engine: str = "chatterbox"
+    engine: str = "openvoice"
+    reference_text: str = Field(default="", max_length=6000)
+    clone_effort: str = Field(default="balanced", pattern="^(fast|balanced|deep)$")
 
 
 @app.post("/api/voices")
@@ -357,7 +362,7 @@ def import_voice(body: VoiceImport):
         "voice",
         f"Guardar voz: {body.name}",
         lambda job: speech.register_voice(
-            body.name, Path(body.reference), render.ffmpeg_path(), job, body.engine
+            body.name, Path(body.reference), render.ffmpeg_path(), job, body.engine, body.reference_text, body.clone_effort
         ),
     )
 
@@ -402,6 +407,48 @@ def try_openvoice(voice_id: str, body: VoicePreview):
     return jobs.submit("voice-preview", "Probar clonación con OpenVoice V2", prepare)
 
 
+@app.post("/api/engine/preset/{engine}/install")
+def install_preset_voice_engine(engine: str):
+    if engine not in speech.PRESET_ENGINES:
+        raise ValueError("Motor inválido")
+    for pending in job_list():
+        if pending.get("kind") == f"{engine}-install" and pending.get("status") in {"running", "queued"}:
+            return pending
+    return jobs.submit(f"{engine}-install", f"Instalar {speech.PRESET_ENGINES[engine]}", lambda job: speech.install_preset_engine(engine, job))
+
+
+@app.post("/api/engine/light/{engine}/install")
+def install_light_voice_engine(engine: str):
+    if engine not in speech.LIGHT_ENGINES:
+        raise ValueError("Motor de voz inválido.")
+    for pending in job_list():
+        if pending.get("kind") == f"{engine}-install" and pending.get("status") in {"running", "queued"}:
+            return pending
+    return jobs.submit(f"{engine}-install", f"Instalar {speech.LIGHT_ENGINES[engine]}", lambda job: speech.install_light_engine(engine, job))
+
+
+@app.post("/api/voices/{voice_id}/light/{engine}")
+def try_light_voice(voice_id: str, engine: str, body: VoicePreview):
+    if engine not in speech.LIGHT_ENGINES or not speech.light_engine_status(engine)["ready"]:
+        raise ValueError("Instala el motor desde Biblioteca de voces primero.")
+    original = speech.get_voice(voice_id)
+    if not original.get("reference"):
+        raise ValueError("Esta voz no tiene una muestra para clonar.")
+    def prepare(job):
+        existing = next((v for v in speech.list_voices() if v.get("source_voice_id") == voice_id and v["engine"] == engine), None)
+        if existing:
+            new_id = existing["id"]
+        else:
+            result = speech.register_voice((original["name"] + " · " + speech.LIGHT_ENGINES[engine])[:100], Path(original["reference"]), render.ffmpeg_path(), job, engine, original.get("reference_text", ""))
+            new_id = result["voice_id"]
+            path = core.DATA / "voices" / new_id / "voice.json"
+            voice = core.read_json(path)
+            voice["source_voice_id"] = voice_id
+            core.write_json(path, voice)
+        return speech.preview_voice(new_id, body.text, job, render.ffmpeg_path())
+    return jobs.submit("voice-preview", f"Probar {speech.LIGHT_ENGINES[engine]}", prepare)
+
+
 @app.post("/api/voices/{voice_id}/preview")
 def generate_voice_preview(voice_id: str, body: VoicePreview):
     speech.get_voice(voice_id)
@@ -420,6 +467,24 @@ def voice_audio(voice_id: str, audio_kind: str):
         raise ValueError("Tipo de audio inválido.")
     path = core.DATA / "voices" / core.identifier(voice_id) / f"{audio_kind}.wav"
     return file_response(path, media_type="audio/wav")
+
+
+class VoiceRename(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+@app.patch("/api/voices/{voice_id}")
+def rename_voice(voice_id: str, body: VoiceRename):
+    path = core.DATA / "voices" / core.identifier(voice_id) / "voice.json"
+    voice = core.read_json(path)
+    if voice is None:
+        raise FileNotFoundError("Voz inexistente o no editable.")
+    name = body.name.strip()
+    if not name:
+        raise ValueError("La voz necesita un nombre.")
+    voice["name"] = name
+    core.write_json(path, voice)
+    return voice
 
 
 @app.delete("/api/voices/{voice_id}")

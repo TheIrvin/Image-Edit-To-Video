@@ -69,6 +69,7 @@ El modo opcional **Por número del archivo** usa el número final: `stick8.png`,
 - El margen predeterminado es **0,1 s**: un audio de 3 s produce una escena de 3,1 s a 30 fps. El redondeo agrega como máximo menos de un fotograma.
 - Las transiciones se aplican al inicio de la escena nueva usando el último fotograma de la anterior. No restan tiempo a las escenas, no mezclan las voces y no cambian la velocidad de la narración automáticamente.
 - **Preparar y medir narración** permite conocer los tiempos antes de renderizar. La caché reutiliza el audio al cambiar formato, movimientos o filtros; se invalida al cambiar texto, voz o velocidad.
+- En voces clonadas se recortan bordes silenciosos conservando 60 ms de entrada y 100 ms de salida. Los huecos interiores detectados de al menos 600 ms se reducen a 320 ms; las pausas cortas se conservan. Es una detección por energía, no por significado. La edición reutiliza los WAV originales, y las pausas adicionales elegidas en el editor se siguen respetando. Las exportaciones existentes no cambian: hay que preparar o generar otra versión para aplicar el ajuste.
 - **Previsualizar escena** incluye la escena anterior cuando existe, para revisar la transición de entrada. Las vistas previas se generan a 720 y se guardan por separado.
 
 El modelo de voz puede cometer errores de pronunciación o generación; escucha las vistas previas antes de publicar. El editor conserva el texto suministrado y nunca lo resume ni lo reescribe automáticamente.
@@ -173,3 +174,29 @@ py -3.12 -m venv .venv
 Las pruebas verifican parsing con y sin etiquetas, orden natural y emparejamiento desde `stick8`, errores de cantidad/numeración, caché estable, controles de API, punto de interés y render real de las ocho transiciones en ambos formatos. Decodifican los MP4 para contar los fotogramas y comprobar que la pausa de audio siga siendo silencio. Utilizan audio de prueba conocido, sin descargar el modelo de voz.
 
 El motor se renderiza secuencialmente con FFmpeg y prepara una imagen por escena con Pillow; no carga cien imágenes a resolución completa a la vez. Chatterbox vive en otro proceso para aislar sus dependencias y permitir cancelar su ejecución.
+
+
+## Clonación ligera en CPU: MOSS
+
+MOSS-TTS-Nano ONNX permanece disponible en Biblioteca de voces, en el entorno aislado `.venv-tts-cpu`. Usa ONNX Runtime CPU y reutiliza los códigos de la muestra de referencia.
+
+# Narradores predefinidos en español
+
+
+Supertonic también ofrece una integración **experimental de clonación comunitaria**, distinta de las voces predefinidas. En «Guardar una voz» selecciona «Supertonic 3 · clonador comunitario» y elige 30, 60 o 200 pasos. La preparación es local, se hace una vez y puede durar varios minutos. Después se reutiliza el perfil JSON con el motor Python ONNX para narrar. La transcripción exacta de la muestra ayuda a ajustar duración y ritmo; el parecido, el acento y la emoción pueden ser limitados. Se conserva la muestra original junto al perfil adaptado.
+
+El instalador reproducible es `.venv-narrators/Scripts/python.exe scripts/install_supertonic_clone.py` y requiere Cargo. Usa `supertonic3-tts==1.3.0`, los pesos Supertonic existentes y ERes2Net de 3D-Speaker distribuido por sherpa-onnx. El recuento conjunto es aproximadamente 105,8M elementos de pesos, incluido el codificador de identidad. El binario se instala dentro de `data/tools/supertonic-clone`.
+
+La Biblioteca de voces incluye Supertonic 3 y Scylla’s Band v2, con diez voces por modelo. Son voces predefinidas: no copian la identidad ni la interpretación de una muestra personal. Se pueden probar con «Generar ejemplo» y seleccionar para narrar los proyectos.
+
+Ambos usan ONNX en CPU y un entorno separado `.venv-narrators`. El recuento de elementos de pesos de los grafos canónicos es 99,2M para Supertonic y 135,6M para Scylla, incluyendo vocoder y, cuando corresponde, G2P. Scylla incluye exportaciones repetidas para diferentes longitudes; estas no representan redes adicionales. Los perfiles guardan el desglose del recuento. El código y los modelos se fijan a versiones concretas en el instalador y el worker.
+
+
+
+## Nombres de voces e instalación por equipo
+
+Las tarjetas de voces guardadas incluyen «Editar nombre». El cambio se conserva al recargar y mantiene el mismo identificador, muestra, perfil y selección en proyectos. Las voces de Windows conservan su nombre del sistema.
+
+OpenVoice V2 es la opción inicial al guardar una nueva voz. No se instala ni descarga automáticamente: cada usuario debe instalarlo desde Biblioteca de voces y aportar su propia muestra. La velocidad y calidad dependen del procesador, memoria, texto, modelo y aceleración disponible; «predeterminado» no garantiza generación rápida. OpenVINO se compara localmente y las alternativas siguen siendo opcionales.
+
+El repositorio contiene código e instaladores; no incluye muestras personales, perfiles de voces, modelos descargados, cachés, videos ni entornos virtuales. Estos permanecen en `data/` y `.venv-*`, excluidos de Git. Los informes de investigación y proyectos personales no forman parte del código distribuido.

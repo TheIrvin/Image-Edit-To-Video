@@ -57,6 +57,14 @@ def crop_box(width, height, ratio, x, y):
     return (left, top, left + cw, top + ch)
 
 
+def effective_fit(scene, settings, source_size, width, height):
+    fit = settings["fit"] if scene["fit"] == "inherit" else scene["fit"]
+    # A landscape illustration loses most of its story when cropped vertically.
+    if height > width and source_size[0] > source_size[1] and scene["fit"] == "inherit":
+        return "blur"
+    return fit
+
+
 def prepare_image(
     source: Path, destination: Path, width, height, scene, settings, *, overscan=True
 ):
@@ -67,7 +75,7 @@ def prepare_image(
     # El límite evita disparar el uso de memoria al exportar en 2K.
     factor = min(2, 4096 / max(width, height)) if overscan else 1
     w, h = round(width * factor), round(height * factor)
-    fit = settings["fit"] if scene["fit"] == "inherit" else scene["fit"]
+    fit = effective_fit(scene, settings, image.size, width, height)
     if fit == "blur":
         background = image.crop(
             crop_box(*image.size, w / h, scene["focus_x"], scene["focus_y"])
@@ -103,11 +111,13 @@ def prepare_image(
 
 
 def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=0, max_zoom=1.15):
+    if height > width:
+        max_zoom = min(max_zoom, 1.05)
     # Aceleración y frenado continuos, también en el fotograma de reserva.
-    # Las escenas breves recorren menos distancia para mantener una cámara lenta.
+    # Mantener un recorrido visible también en escenas breves.
     t = f"min(1,on/{max(1, frames - 1)})"
     p = f"((1-cos(PI*{t}))/2)"
-    amount = min(0.06, max_zoom - 1, 0.006 * max(0, (frames - 1) / fps))
+    amount = min(max_zoom - 1, 0.08 + 0.018 * max(0, (frames - 1) / fps))
     zoom = f"{amount:.6f}"
     forward = f"(0.15+0.7*{p})"
     backward = f"(0.85-0.7*{p})"
@@ -132,17 +142,21 @@ def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=
         x, y = f"(iw-iw/zoom)*{backward}", f"(ih-ih/zoom)*{backward}"
     elif motion == "still":
         z = "1"
-    elif motion in {"push_focus", "reveal", "drift"}:
+    elif motion in {"push_focus", "reveal", "drift", "punch_in", "arc"}:
         # Rampas breves en los extremos y avance sostenido en el centro, sin
         # detener la cámara durante una gran parte de cada plano.
         ramp = 0.14
         travel = f"if(lt({t},{ramp}),{t}*{t}/{2*ramp},if(gt({t},{1-ramp}),{1-ramp}-(1-{t})*(1-{t})/{2*ramp},{t}-{ramp/2}))/{1-ramp}"
         q = f"({travel})"
-        amount = min(0.12, 0.009 * max(0, (frames - 1) / fps))
+        amount = min(0.22, 0.09 + 0.018 * max(0, (frames - 1) / fps))
         if motion == "drift":
             amount *= 0.45
         start = min(1.025, max_zoom)
         end = min(start + amount, max_zoom)
+        if motion == "punch_in":
+            q = f"(1-pow(1-min(1,{t}/0.28),3))"
+        elif motion == "arc":
+            start = end
         if motion == "reveal":
             start, end = end, start
         z = f"{start:.6f}+({end-start:.6f})*{q}"
@@ -151,6 +165,10 @@ def motion_filter(motion, frames, width, height, fps, focus=(0.5, 0.5), variant=
         target_x = f"max(0,min(iw-iw/zoom,iw*{fx:.6f}-iw/zoom/2))"
         target_y = f"max(0,min(ih-ih/zoom,ih*{fy:.6f}-ih/zoom/2))"
         x, y = target_x, target_y
+        if motion == "arc":
+            direction = 1 if variant % 2 else -1
+            x = f"max(0,min(iw-iw/zoom,({target_x})+(iw-iw/zoom)*0.35*{direction}*(2*{q}-1)))"
+            y = f"max(0,min(ih-ih/zoom,({target_y})-(ih-ih/zoom)*0.25*sin(PI*{q})))"
         if motion == "drift":
             direction = 1 if variant % 2 else -1
             x = f"max(0,min(iw-iw/zoom,({target_x})+(iw-iw/zoom)*{direction}*0.18*(2*{q}-1)))"
@@ -265,11 +283,9 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
         motion, transition = scene_plan(scene, index, settings["seed"], duration)
         if scene["motion"] == "auto" and duration >= 3.5:
             analysis = scene["visual_analysis"]
-            if analysis["method"] == "center" and not scene["focus_manual"]:
-                motion = "still"
-            elif analysis["faces"] == 1 and motion == "drift":
+            if analysis["faces"] == 1 and motion == "drift":
                 motion = "push_focus"
-            elif analysis["faces"] > 1:
+            elif analysis["faces"] > 1 and motion in {"push_focus", "punch_in"}:
                 motion = "reveal"
         if previous is None:
             transition = "cut"
@@ -293,7 +309,9 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
         ]
         # Traducir el punto de interés al recorte real, evitando aplicarlo dos veces.
         focus = (scene["focus_x"], scene["focus_y"])
-        fit = settings["fit"] if scene["fit"] == "inherit" else scene["fit"]
+        with Image.open(image_path) as source:
+            source_size = ImageOps.exif_transpose(source).size
+        fit = effective_fit(scene, settings, source_size, width, height)
         if fit != "blur":
             with Image.open(image_path) as source:
                 source_size = ImageOps.exif_transpose(source).size
@@ -312,10 +330,13 @@ def render(project, job, *, preview=False, only_scene=None, reuse_audio_only=Fal
                 0.5 + (focus[0] - 0.5) * sw * scale / width,
                 0.5 + (focus[1] - 0.5) * sh * scale / height,
             )
+            if height > width:
+                # Keep the complete inset visible throughout the movement.
+                focus = (0.5, 0.5)
         analysis = scene["visual_analysis"]
         # Si ya hay que ampliar el original, reducir el zoom adicional.
         native_scale = min(analysis["width"] / width, analysis["height"] / height)
-        max_zoom = 1 + 0.12 * min(1, native_scale * native_scale)
+        max_zoom = 1.10 + 0.14 * min(1, native_scale * native_scale)
         current_filter = motion_filter(
             motion, frames, width, height, fps, focus, scene["number"], max_zoom
         )

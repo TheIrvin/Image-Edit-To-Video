@@ -28,6 +28,8 @@ MOTIONS = {
     "push_focus",
     "reveal",
     "drift",
+    "punch_in",
+    "arc",
 }
 TRANSITIONS = {
     "auto",
@@ -180,7 +182,7 @@ def create_project(
     if script_mode == "paragraphs":
         if len(parsed) != len(all_images):
             raise ValueError(
-                f"El TXT contiene {len(parsed)} párrafos y la carpeta tiene {len(all_images)} imágenes. Sin etiquetas, las cantidades deben coincidir."
+                f"El TXT contiene {len(parsed)} párrafos y la carpeta tiene {len(all_images)} imágenes. Sin etiquetas, las cantidades deben coincidir. Si preparaste las imágenes con un guion de sincronización, selecciona imagenes/guion-video.txt: agrupa la narración por imagen con etiquetas imgN:."
             )
         # Sin etiquetas, cada párrafo se empareja siempre por orden natural.
         images = {i + 1: path for i, path in enumerate(ordered)}
@@ -312,6 +314,10 @@ def audio_key(text: str, voice: dict, speed: float) -> str:
         key: voice.get(key)
         for key in ("id", "engine", "language", "reference", "system_name", "created")
     }
+    if voice.get("engine") in {"supertonic", "scylla"}:
+        stable_voice.update(speaker=voice["speaker"], model_version=voice["model_version"])
+    if voice.get("engine") in {"moss"}:
+        stable_voice["model_version"] = "moss-8b7bcc93-onnx-v1"
     fingerprint = {
         "text": text,
         "voice": stable_voice,
@@ -340,17 +346,13 @@ def scene_plan(scene, index: int, seed: int, duration=None):
     reveal = bool(re.search(
         r"\b(ciudad|paisaje|mundo|calle|puente|habitación|alrededor)\b", text
     ))
-    variation = int(hashlib.sha256(
-        f"{seed}:{scene.get('number', index)}:{text}".encode()
-    ).hexdigest()[:8], 16)
-    if duration is not None and duration < 3.5:
-        automatic = "still"
-    elif emphasis:
-        automatic = "push_focus"
+    if emphasis:
+        automatic = ("punch_in", "push_focus", "diagonal_in")[index % 3]
     elif reveal or time_change:
         automatic = "reveal"
     else:
-        automatic = ("drift", "push_focus", "reveal", "still")[variation % 4]
+        sequence = ("punch_in", "pan_right", "reveal", "diagonal_in", "pan_up", "arc", "zoom_out", "pan_left")
+        automatic = sequence[(index + seed) % len(sequence)]
     motion = (
         scene["motion"]
         if scene["motion"] != "auto"
@@ -359,6 +361,6 @@ def scene_plan(scene, index: int, seed: int, duration=None):
     transition = (
         scene["transition"]
         if scene["transition"] != "auto"
-        else ("fade" if time_change else "cut")
+        else ("fade" if time_change else ("cut", "slideleft", "cut", "wiperight", "cut", "fade")[index % 6])
     )
     return motion, "cut" if index == 0 else transition

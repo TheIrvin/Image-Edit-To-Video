@@ -11,3 +11,21 @@ historias/
 SKILL/
 instrucciones-raro-imagenes.txt
 investigacion-nichos-poderosamente-raro.md
+
+.venv-audio8/
+
+.venv-tts-cpu/
+
+.venv-narrators/
+.venv-yourtts/
+
+# Instalaciones, voces y contenido personal no se publican.
+.venv-*/
+.extension-flow-publish/
+flow-extension-update/
+flow-extension-*.zip
+Ideas/
+100-ideas-shorts-poderes*.txt
+prompt-master-poderosamente-raro.txt
+skill-narracion-imagen-v2/
+crear_shorts.py

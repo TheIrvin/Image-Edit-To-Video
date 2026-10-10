@@ -38,6 +38,7 @@ def test_vertical_blur_foreground_fills_width(tmp_path, overscan):
     with Image.open(destination) as image:
         assert image.getpixel((0, image.height // 2)) == (255, 255, 255)
         assert image.getpixel((image.width - 1, image.height // 2)) == (255, 255, 255)
+        assert image.getpixel((image.width // 2, image.height // 2)) == (255, 255, 255)
         assert image.getpixel((image.width // 2, 0))[0] < 200
 
 

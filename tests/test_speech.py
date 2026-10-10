@@ -12,6 +12,22 @@ from app import speech
 from app.jobs import Cancelled
 
 
+@pytest.mark.parametrize("engine,speaker", [("supertonic", "M1"), ("kokoro", "em_alex")])
+def test_preset_profiles_use_valid_ids_and_keep_archived_voices_retired(monkeypatch, engine, speaker):
+    from app.core import identifier
+    monkeypatch.setattr(speech, "preset_engine_status", lambda engine: {"profile": {"speakers": [speaker]}})
+    speech.register_preset_voices(engine)
+    voices = [v for v in speech.list_voices() if v["engine"] == engine]
+    assert len(voices) == 1
+    voice = voices[0]
+    assert identifier(voice["id"]) == voice["id"]
+    assert voice["kind"] == "Voz predefinida" and "reference" not in voice
+    path = speech.DATA / "voices" / voice["id"] / "voice.json"
+    path.rename(path.with_name("voice.archived.json"))
+    speech.register_preset_voices(engine)
+    assert not path.exists()
+
+
 def test_chunking_preserves_all_words_and_punctuation():
     text = (
         "La primera vez que Nico murió, tenía la mano de un desconocido entre los dedos.\n\n"
@@ -63,6 +79,20 @@ class FixtureWorker:
 VOICE = {"id": "test", "engine": "sapi", "language": "es", "system_name": "Fixture"}
 
 
+def test_adapted_supertonic_uses_saved_style_without_refitting(monkeypatch):
+    monkeypatch.setattr(speech, "supertonic_clone_status", lambda: {"ready": True})
+    voice = dict(id=uuid.uuid4().hex, engine="supertonic-clone", language="es", style_path="saved-style.json")
+    worker = FixtureWorker()
+    outputs = speech.synthesize([{"text": "Una voz adaptada."}], voice, 1, worker, "fixture-ffmpeg")
+    request_paths = list((speech.DATA / "jobs" / worker.id).glob("speech-request.json"))
+    request = json.loads(request_paths[0].read_text(encoding="utf-8"))
+    assert request["style_path"] == "saved-style.json"
+    assert "reference" not in request and "speaker" not in request
+    assert outputs[0].is_file()
+    speech.synthesize([{"text": "Una voz adaptada."}], voice, 1, worker, "fixture-ffmpeg")
+    assert len(worker.batches) == 1
+
+
 def test_repeated_text_is_generated_once():
     job = FixtureWorker()
     outputs = speech.synthesize(
@@ -71,6 +101,20 @@ def test_repeated_text_is_generated_once():
     assert outputs[0] == outputs[1]
     assert outputs[0].is_file()
     assert len(job.batches[0]) == 1
+
+
+def test_sequential_voices_do_not_reuse_previous_batch_progress():
+    class LoadingWorker(FixtureWorker):
+        def run(self, command, progress=None):
+            if progress:
+                progress()  # Poll while the next model is still loading.
+            super().run(command, progress=progress)
+    job = LoadingWorker()
+    speech.synthesize([{"text": "Primera voz."}], VOICE, 1, job, "fixture-ffmpeg")
+    second = dict(VOICE, id=uuid.uuid4().hex)
+    output = speech.synthesize([{"text": "Segunda voz."}], second, 1, job, "fixture-ffmpeg")[0]
+    assert output.is_file()
+    assert len(job.batches) == 2
 
 
 def test_speed_change_reuses_original_synthesis():
